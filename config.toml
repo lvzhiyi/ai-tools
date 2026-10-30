@@ -1,0 +1,33 @@
+# ai-tools 配置。改完直接生效，不用重启。
+
+[comfy]
+# ComfyUI 桌面版：设置 → 关于 里能看到端口
+url = "http://127.0.0.1:8188"
+# 工作流（API 格式）。换模型时：在 ComfyUI 里 工作流 → 导出(API)，放进 workflows/，再改下面的节点编号
+workflow = "workflows/moss_t2i_api.json"
+prompt_node = "18:17"      # 填提示词的节点（Text (User Prompt)）
+seed_node = "18:7"         # 有 seed 的节点（K采样器）
+save_node = "9"            # 保存图像节点
+resolution_node = "19"     # 分辨率选择器
+aspect_ratio = "9:16 (Portrait Widescreen)"
+timeout_sec = 1200         # 单张图最长等待时间
+
+[tts]
+model = "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-bf16"
+lang_code = "chinese"
+default_voice = "Vivian"   # 可选：Vivian / Serena / Uncle_Fu / Eric / Dylan
+
+[subtitle]
+max_chars = 16             # 每条字幕最多字数（竖屏建议 12~16）
+
+[video]
+width = 1080
+height = 1920
+fps = 30
+pad_sec = 0.4              # 每句台词后留白（秒）
+silent_shot_sec = 2.0      # 没有台词的镜头默认时长
+
+[lmstudio]
+url = "http://127.0.0.1:1234/v1"
+# 在 LM Studio 的 Developer 页面看模型名；中文剧本建议换成 Qwen 14B 级别
+model = "google/gemma-4-e4b"

@@ -1,0 +1,32 @@
+# 路线图
+
+按"先跑通，再变好，再变快"的顺序。做完一项就打勾，并在 learning-log 里记一笔。
+
+## 阶段一：工具链跑通 ✅
+
+- [x] LM Studio + 第一个模型
+- [x] ComfyUI + MOSS-Image 出第一张图
+- [x] mlx-whisper 自动字幕（srt 命令）
+- [x] Qwen3-TTS 配音（tts 命令）
+- [x] 流水线项目 ai-tools
+
+## 阶段二：流水线实战
+
+- [ ] `uv run studio run storyboards/example.json` 跑通示例
+- [ ] 用一个真实剧本：`studio plan` → 人工修改分镜 → `studio run` → 剪映精剪 → 发视频号
+- [ ] 记录每一步的耗时，找瓶颈
+
+## 阶段三：质量
+
+- [ ] **角色一致性**：同一角色 10 个镜头会不会换脸？会的话试参考图编辑模型（Qwen Image Edit 量化版）或训练角色 LoRA
+- [ ] **出图速度**：试 Z-Image Turbo（8 步、bf16），和 MOSS 对比速度和画质，写进 log
+- [ ] **拆分镜质量**：LM Studio 换 Qwen 14B 级模型，对比 gemma-4-e4b 拆出来的分镜
+- [ ] **声音克隆**：Qwen3-TTS Base 模型 + 自己的声音，给视频号做固定旁白
+- [ ] **图生视频**：分镜图 → 可灵 / 即梦（在线）；或 ComfyUI 里的 API 节点
+
+## 阶段四：工程化（同时也是求职作品）
+
+- [ ] 发布机器人接本地模型：commit → 更新日志、构建日志 → 失败原因（本地优先、云端兜底）
+- [ ] 流水线加简单的 Web 界面（Flutter Web 或 NestJS + 前端），上传剧本 → 下载素材包
+- [ ] 推到 GitHub，写一篇复盘（视频号 / 博客）
+- [ ] 简历加一条："基于本地大模型的 AI 短剧生产流水线（LLM 分镜 + 文生图 + TTS + 自动字幕）"
