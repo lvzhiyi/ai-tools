@@ -63,9 +63,19 @@ def load(path: Path) -> dict:
     return sb
 
 
-def render_prompt(shot: dict, characters: dict) -> str:
-    """把 {角色id} 替换成外貌描述，得到最终送给出图模型的提示词。"""
-    return _PLACEHOLDER.sub(lambda m: characters[m.group(1)]["look"], shot["image"])
+def render_prompt(shot: dict, characters: dict, ref_char: str | None = None) -> str:
+    """把 {角色id} 替换成外貌描述，得到最终送给出图模型的提示词。
+
+    ref_char：编辑模式下作为参考图的角色。它的占位符换成"参考图里的人"，
+    让模型照着参考图画脸，外貌描述只作补充。
+    """
+    def sub(m):
+        cid = m.group(1)
+        look = characters[cid]["look"]
+        if cid == ref_char:
+            return f"the same person from the reference image ({look})"
+        return look
+    return _PLACEHOLDER.sub(sub, shot["image"])
 
 
 def shot_name(shot: dict) -> str:

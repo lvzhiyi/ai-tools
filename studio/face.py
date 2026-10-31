@@ -99,6 +99,8 @@ class FaceMatcher:
                 "box": [int(v) for v in row[:4]],
                 "area": float(row[2] * row[3]),
                 "det_score": float(row[14]),
+                "face_h": round(float(row[3]) / h, 3),  # 脸高占画面高度的比例：越小越像远景
+                "yaw": yaw(row),
             })
         return sorted(out, key=lambda f: -f["area"])
 
@@ -116,3 +118,11 @@ class FaceMatcher:
         if not faces:
             return None
         return max(self.similarity(ref_feature, f["feature"]) for f in faces)
+
+
+def yaw(row) -> float:
+    """用 5 个关键点粗估脸的左右转向：鼻尖偏离两眼中点的程度。
+    0 ≈ 正脸；±0.3 左右是明显侧脸；绝对值越大转得越厉害（正负代表方向）。"""
+    ex1, ex2, nose = float(row[4]), float(row[6]), float(row[8])
+    eye_dist = abs(ex2 - ex1) or 1.0
+    return round((nose - (ex1 + ex2) / 2) / eye_dist, 3)

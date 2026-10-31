@@ -43,10 +43,13 @@ def run(sb_path: Path, cfg: dict, only: str | None = None, force: bool = False) 
 
     # 1. 出图（带 AI 质检：不合格自动重画）
     if "images" in stages:
+        from .comfy import make_editor
         from .qa import produce_images
         comfy = ComfyClient(cfg["comfy"])
         comfy.ping()
-        produce_images(sb, out, cfg, comfy, force=force)
+        editor = make_editor(cfg["comfy"])
+        _log("有角色的镜头：" + ("参考图编辑（照着定妆照画）" if editor else "文生图"))
+        produce_images(sb, out, cfg, comfy, force=force, editor=editor)
         if len(stages) > 1:
             _log("释放 ComfyUI 内存，给配音模型腾地方")
             comfy.free()

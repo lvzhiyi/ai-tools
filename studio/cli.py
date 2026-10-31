@@ -30,9 +30,21 @@ def cmd_check(cfg: dict, _args) -> int:
         stats = c.ping()
         dev = (stats or {}).get("devices", [{}])[0].get("type", "?")
         print(f"✅ ComfyUI 已连接（{cfg['comfy']['url']}，设备 {dev}）")
+        print(f"✅ 文生图工作流：{c.profile}（{c.cfg['workflow']}）")
         for p in c.check_workflow():
             ok = False
             print(f"❌ {p}")
+        from .comfy import make_editor
+        ed = make_editor(cfg["comfy"])
+        if ed:
+            probs = ed.check_workflow()
+            for p in probs:
+                ok = False
+                print(f"❌ [edit] {p}")
+            if not probs:
+                print(f"✅ 参考图编辑工作流：{ed.cfg['workflow']}")
+        else:
+            print("⚪ 没有启用参考图编辑（config.toml 的 [comfy.edit]）")
     except ComfyError as e:
         ok = False
         print(f"❌ {e}")
@@ -97,9 +109,9 @@ def _load_sb(path: str):
 
 
 def cmd_cast(cfg: dict, args) -> int:
-    from .comfy import ComfyClient
+    from .comfy import ComfyClient, make_editor
     from .face import FaceMatcher
-    from .qa import ensure_cast
+    from .qa import cast_angles, ensure_cast
 
     sb, out = _load_sb(args.storyboard)
     if not sb["characters"]:
@@ -107,9 +119,14 @@ def cmd_cast(cfg: dict, args) -> int:
         return 0
     comfy = ComfyClient(cfg["comfy"])
     comfy.ping()
-    refs = ensure_cast(sb, out, comfy, FaceMatcher(), force=args.force)
-    for cid, p in refs.items():
-        print(f"✅ {cid}：{p}")
+    faces = FaceMatcher()
+    front = ensure_cast(sb, out, comfy, faces, force=args.force)
+    editor = make_editor(cfg["comfy"]) if cfg.get("qa", {}).get("cast_angles", True) else None
+    refs = cast_angles(sb, out, front, editor, force=args.force, faces=faces,
+                       threshold=float(cfg.get("qa", {}).get("angle_threshold", 0.35)))
+    for cid, items in refs.items():
+        for label, p in items:
+            print(f"✅ {cid} {label}：{p}")
     print("满意就保留；不满意加 --force 重画，或在分镜表里给角色指定 ref（自己挑的图）")
     return 0
 
@@ -191,6 +208,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--only", choices=["images", "audio", "subtitle", "video"], help="只跑某一步")
     s.add_argument("--force", action="store_true", help="已有文件也重新生成")
     s.add_argument("--no-qa", action="store_true", help="关闭 AI 质检（只画一次）")
+    s.add_argument("--no-edit", action="store_true", help="不用参考图编辑，全部文生图（做对比实验用）")
 
     s = sub.add_parser("cast", help="生成角色定妆照")
     s.add_argument("storyboard")
@@ -212,6 +230,8 @@ def main(argv: list[str] | None = None) -> int:
     cfg = load_config()
     if getattr(args, "no_qa", False):
         cfg.setdefault("qa", {})["enabled"] = False
+    if getattr(args, "no_edit", False) and isinstance(cfg["comfy"].get("edit"), dict):
+        cfg["comfy"]["edit"]["enabled"] = False
     handler = {"check": cmd_check, "image": cmd_image, "plan": cmd_plan, "run": cmd_run,
                "cast": cmd_cast, "qa": cmd_qa, "calibrate": cmd_calibrate, "label": cmd_label}[args.cmd]
     try:
