@@ -74,6 +74,10 @@ class FaceMatcher:
     def __init__(self, score_threshold: float = 0.7):
         import cv2
 
+        try:  # OpenCV 5 的新推理引擎会打印无害的 WARN，关掉
+            cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_ERROR)
+        except AttributeError:
+            pass
         self.cv2 = cv2
         p = ensure_models()
         self.detector = cv2.FaceDetectorYN.create(str(p["detector"]), "", (320, 320), score_threshold, 0.3, 5000)
