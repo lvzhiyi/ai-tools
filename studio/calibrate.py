@@ -33,35 +33,22 @@ def _log(msg: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
-def _positives(sb: dict, out: Path) -> dict[str, list[Path]]:
-    """每个角色：定妆照 + 所有包含该角色的镜头候选图。"""
-    groups: dict[str, list[Path]] = {}
-    cand = out / "images" / "_candidates"
-    for cid in sb["characters"]:
-        imgs = []
-        cast = out / "cast" / f"{cid}.png"
-        if cast.exists():
-            imgs.append(cast)
-        for s in sb["shots"]:
-            if cid in s["characters"]:
-                imgs += sorted(cand.glob(f"{sbmod.shot_name(s)}_*.png"))
-        if imgs:
-            groups[cid] = imgs
-    return groups
-
-
 def run(sb: dict, out: Path, cfg: dict, comfy, people: int = 6) -> dict:
     from .face import FaceMatcher
+    from .samples import character_images
 
     faces = FaceMatcher()
-    cal_dir = ROOT / "output" / "_calibrate"
+    # 对照组按出图模型分目录：正负样本必须来自同一个模型，比较才公平
+    profile = comfy.profile if comfy else cfg["comfy"].get("t2i_profile", "t2i")
+    cal_dir = ROOT / "output" / "_calibrate" / profile
     cal_dir.mkdir(parents=True, exist_ok=True)
+    _log(f"对照组目录：{cal_dir.relative_to(ROOT)}（出图模型 {profile}）")
 
     # 1. 正样本
-    pos_groups = _positives(sb, out)
+    pos_groups = character_images(sb, out)
     n_pos_imgs = sum(len(v) for v in pos_groups.values())
     if n_pos_imgs < 2:
-        raise RuntimeError("同一角色的图不够（至少 2 张）。先跑一次带质检的 run，生成定妆照和候选图")
+        raise RuntimeError("同一角色的图不够（至少 2 张）。先跑一次 run，生成定妆照和镜头图")
     _log(f"正样本：{n_pos_imgs} 张角色图（{', '.join(f'{k}×{len(v)}' for k, v in pos_groups.items())}）")
 
     # 2. 负样本：对照组（已生成的会跳过）
@@ -88,8 +75,7 @@ def run(sb: dict, out: Path, cfg: dict, comfy, people: int = 6) -> dict:
             cache[k] = f[0]["feature"] if f else None
         return cache[k]
 
-    def rel(p: Path) -> str:
-        return str(p.relative_to(out)) if out in p.parents else f"_calibrate/{p.name}"
+    from .samples import rel
 
     char_imgs = [p for imgs in pos_groups.values() for p in imgs]
     skipped = [rel(p) for p in char_imgs + others if feat(p) is None]
@@ -170,7 +156,7 @@ def analyze(same: list[float], diff: list[float], qa_cfg: dict) -> dict:
     elif s_diff["p95"] < s_same["p5"]:
         verdict = "两组基本分开，只有个别重叠：阈值可用"
     else:
-        verdict = "两组重叠明显：SFace 对这类 AI 生成的脸区分力有限，调阈值作用不大，需要从生成侧解决一致性"
+        verdict = "两组重叠明显：SFace 对这批图区分力有限，单靠阈值分不开，质检结果要结合人工抽查"
     return {
         "same": s_same, "diff": s_diff,
         "suggested": suggested, "verdict": verdict, "separable": separable,

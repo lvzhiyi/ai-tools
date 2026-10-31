@@ -15,7 +15,9 @@ match_score (1-5): how well the image matches the description
 defects: concrete visible problems, each a short phrase, e.g. "extra fingers on left hand",
   "arm bent unnaturally", "duplicated person", "garbled text", "face distorted", "wrong clothing color".
   Empty list if none. Do not list style preferences as defects.
-summary: one sentence in Chinese describing what the image actually shows."""
+summary: one sentence in Chinese describing what the image actually shows.
+extreme_expression: true if the main character's face shows an extreme expression that strongly distorts the face
+  (e.g. eyes squeezed shut while laughing, mouth wide open screaming, face scrunched up crying hard); otherwise false."""
 
 SCHEMA = {
     "type": "object",
@@ -23,8 +25,9 @@ SCHEMA = {
         "match_score": {"type": "integer", "minimum": 1, "maximum": 5},
         "defects": {"type": "array", "items": {"type": "string"}},
         "summary": {"type": "string"},
+        "extreme_expression": {"type": "boolean"},
     },
-    "required": ["match_score", "defects", "summary"],
+    "required": ["match_score", "defects", "summary", "extreme_expression"],
 }
 
 
@@ -39,4 +42,5 @@ def review(image: Path, description: str, cfg: dict, model: str | None = None) -
     result = llm.chat(cfg, messages, SCHEMA, model=model, temperature=0.0, timeout=300)
     result["match_score"] = int(result.get("match_score", 0))
     result["defects"] = [d for d in result.get("defects", []) if d]
+    result["extreme_expression"] = bool(result.get("extreme_expression", False))
     return result

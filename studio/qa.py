@@ -168,6 +168,10 @@ class Inspector:
                     res["notes"].append(f"画面不符合描述（{v['match_score']}/5）")
                 if v["defects"]:
                     res["notes"].append("瑕疵：" + "；".join(v["defects"]))
+                if v.get("extreme_expression") and shot["characters"]:
+                    # 校准发现：大笑闭眼、张嘴怒吼这类镜头，人眼和 SFace 的判断最容易不一致
+                    res["review"] = True
+                    res["notes"].append("👀 表情夸张，人脸分数不太可靠，建议人工复核")
             except Exception as e:  # 看图模型出问题不应该卡死整条流水线
                 res["notes"].append(f"看图质检失败，已跳过：{e}")
 
@@ -381,9 +385,14 @@ def write_report(out: Path, sb: dict, report: dict, q: dict, cross: dict | None 
         face = "<br>".join(face_txt(k, v) for k, v in final["face"].items()) or "-"
         vis = f"{final['vision']['match_score']}/5" if "vision" in final else "-"
         status = "⚠️ 未达标" if r.get("best_effort") else ("✅" if final["passed"] else "❌")
+        if final.get("review"):
+            status += " 👀"
         lines.append(f"| {name} | {final.get('mode', '-')} | {len(atts)} | {status} | {face} | {vis} | {'；'.join(final['notes']) or '-'} |")
     n = len(report) or 1
+    review = [name for name, r in report.items()
+              if next((a for a in r["attempts"] if Path(a["image"]).name == r.get("final")), {}).get("review")]
     lines += ["", f"- 一次通过率：{passed_first}/{len(report)}（{passed_first / n:.0%}）",
+              f"- 👀 建议人工复核：{('、'.join(review)) if review else '无'}",
               f"- 平均每个镜头出图次数：{total_attempts / n:.2f}"]
     if cross:
         lines += ["", "## 跨镜头一致性（同一角色所有镜头两两比对的最低相似度）", ""]

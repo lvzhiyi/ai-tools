@@ -1,0 +1,21 @@
+{
+  "title": "校准集-林夏",
+  "_说明": "专门用于人脸阈值校准：同一个角色在不同景别、角度、表情、光线下各出一张。用 --no-qa 运行，得到未经筛选的样本，再 studio label 人工标注。",
+  "characters": {
+    "linxia": {
+      "name": "林夏",
+      "look": "a 25-year-old East Asian woman with an oval face, shoulder-length straight black hair with soft bangs, natural makeup, wearing a beige double-breasted trench coat over a black turtleneck",
+      "ref": "output/示例-雨夜/cast/linxia.png"
+    }
+  },
+  "shots": [
+    {"id": 1, "image": "Cinematic vertical film still, close-up of {linxia}, facing the camera with a calm neutral expression, sitting by a cafe window in soft daylight, 35mm film look."},
+    {"id": 2, "image": "Cinematic vertical film still, medium shot of {linxia} walking down a brightly lit office corridor, turning her head to the left, fluorescent lighting, 35mm film look."},
+    {"id": 3, "image": "Cinematic vertical film still, close-up of {linxia} laughing happily, warm lamp light in a cozy apartment at night, 35mm film look."},
+    {"id": 4, "image": "Cinematic vertical film still, side profile of {linxia} looking out of a rainy window, overcast grey daylight, quiet mood, 35mm film look."},
+    {"id": 5, "image": "Cinematic vertical film still, full body wide shot of {linxia} standing on a subway platform, train lights in the background, 35mm film look."},
+    {"id": 6, "image": "Cinematic vertical film still, close-up of {linxia} crying with tears on her cheeks, rain-soaked neon street at night, 35mm film look."},
+    {"id": 7, "image": "Cinematic vertical film still, high-angle medium shot of {linxia} looking down at her phone on a busy street in the afternoon sun, 35mm film look."},
+    {"id": 8, "image": "Cinematic vertical film still, low-angle close-up of {linxia} shouting angrily, harsh red light from a sign, night, 35mm film look."}
+  ]
+}

@@ -19,32 +19,40 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import storyboard as sbmod
 from .config import ROOT
+from .samples import character_images, fingerprint, rel
 
 
 def collect_pairs(sb: dict, out: Path) -> list[dict]:
-    """每个角色：定妆照 + 所有包含它的镜头候选图，两两组成一对。"""
-    cand = out / "images" / "_candidates"
+    """每个角色：定妆照（含侧脸）+ 所有包含它的镜头图，两两组成一对。"""
     pairs = []
-    for cid in sb["characters"]:
-        imgs = []
-        cast = out / "cast" / f"{cid}.png"
-        if cast.exists():
-            imgs.append(cast)
-        for s in sb["shots"]:
-            if cid in s["characters"]:
-                imgs += sorted(cand.glob(f"{sbmod.shot_name(s)}_*.png"))
+    for cid, imgs in character_images(sb, out).items():
         for a, b in itertools.combinations(imgs, 2):
-            ra, rb = str(a.relative_to(out)), str(b.relative_to(out))
-            pairs.append({"key": f"{ra}|{rb}", "a": ra, "b": rb, "character": cid})
+            ra, rb = rel(a), rel(b)
+            pairs.append({"key": f"{ra}|{rb}", "a": ra, "b": rb, "character": cid,
+                          "fp": f"{fingerprint(a)}|{fingerprint(b)}"})
     random.Random(42).shuffle(pairs)
     return pairs
 
 
-def load_labels(out: Path) -> dict:
+def load_labels(out: Path, raw: bool = False) -> dict:
+    """返回 {key: "same"/"diff"/"skip"}，只保留和当前文件内容对得上的标注。
+    图被重画后，同名文件的内容变了，旧标注不再适用 —— 用内容指纹判断。"""
     p = out / "labels.json"
-    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    data = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    if raw:
+        return data
+    valid = {}
+    for key, v in data.items():
+        if not isinstance(v, dict):  # 旧格式（没有指纹），无法确认对应的是哪一版图
+            continue
+        try:
+            a, b = key.split("|")
+            if f"{fingerprint(ROOT / a)}|{fingerprint(ROOT / b)}" == v.get("fp"):
+                valid[key] = v["value"]
+        except (FileNotFoundError, ValueError):
+            continue
+    return valid
 
 
 PAGE = """<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>人脸标注</title>
@@ -100,9 +108,13 @@ def serve(sb: dict, out: Path, port: int = 8765, open_browser: bool = True) -> N
     if not pairs:
         raise RuntimeError("没有可标注的图。先跑一次带质检的 run，生成定妆照和候选图")
     labels_path = out / "labels.json"
-    labels = load_labels(out)
+    stored = load_labels(out, raw=True)
+    valid = load_labels(out)
+    stale = len(stored) - len(valid)
+    labels = dict(valid)
+    by_key = {p["key"]: p for p in pairs}
     lock = threading.Lock()
-    root = out.resolve()
+    root = (ROOT / "output").resolve()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
@@ -122,7 +134,7 @@ def serve(sb: dict, out: Path, port: int = 8765, open_browser: bool = True) -> N
                            .replace("__LABELS__", json.dumps(labels, ensure_ascii=False))
                 return self._send(200, html.encode(), "text/html; charset=utf-8")
             if u.path == "/img":
-                p = (root / parse_qs(u.query).get("p", [""])[0]).resolve()
+                p = (ROOT / parse_qs(u.query).get("p", [""])[0]).resolve()
                 if root not in p.parents or not p.is_file():  # 只允许读项目目录里的图
                     return self._send(404, b"not found", "text/plain")
                 return self._send(200, p.read_bytes(), "image/png")
@@ -134,15 +146,20 @@ def serve(sb: dict, out: Path, port: int = 8765, open_browser: bool = True) -> N
             data = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             if data.get("value") not in ("same", "diff", "skip"):
                 return self._send(400, b"bad value", "text/plain")
+            if data.get("key") not in by_key:
+                return self._send(400, b"unknown pair", "text/plain")
             with lock:
                 labels[data["key"]] = data["value"]
-                labels_path.write_text(json.dumps(labels, ensure_ascii=False, indent=2), encoding="utf-8")
+                stored[data["key"]] = {"value": data["value"], "fp": by_key[data["key"]]["fp"]}
+                labels_path.write_text(json.dumps(stored, ensure_ascii=False, indent=2), encoding="utf-8")
             self._send(200, b"{}", "application/json")
 
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     url = f"http://127.0.0.1:{port}/"
     done = sum(1 for p in pairs if p["key"] in labels)
     print(f"共 {len(pairs)} 对，已标 {done} 对。浏览器打开：{url}")
+    if stale:
+        print(f"（有 {stale} 条旧标注对应的图已经被重画或删除，已忽略）")
     print(f"每点一次自动保存到 {labels_path.relative_to(ROOT)}；标完回到这里按 Ctrl+C 结束")
     if open_browser:
         webbrowser.open(url)

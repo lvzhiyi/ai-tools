@@ -10,16 +10,28 @@
 
 ![分镜总览](docs/assets/storyboard.jpg)
 
-> 上面是示例剧本《雨夜》跑一遍流水线的产出：4 个镜头，图片、配音、字幕全部由本地模型生成，ffmpeg 自动拼成预览视频。
-> 带声音的完整预览：[docs/assets/preview.mp4](docs/assets/preview.mp4)
+> 示例剧本《雨夜》跑一遍流水线的产出：先生成角色的三角度定妆照，有角色的镜头照着定妆照画（FLUX.2 klein 参考图生成），
+> 配音、字幕全部由本地模型生成，ffmpeg 自动拼成预览视频。带声音的完整预览：[docs/assets/preview.mp4](docs/assets/preview.mp4)
 
-**实测耗时**（MacBook Pro M5 Pro / 24G）
+**实测**（MacBook Pro M5 Pro / 24G）
 
 | 步骤 | 引擎 | 耗时 |
 |---|---|---|
-| 出图（768×1344） | ComfyUI + FLUX.2 klein 4B（4 步） | ≈ 1 分钟 / 张（MOSS-Image 25 步 ≈ 3.9 分钟） |
+| 出图（768×1344） | ComfyUI + FLUX.2 klein 4B（4 步，参考图编辑） | ≈ 40~60 秒 / 张 |
 | 配音 | mlx-audio + Qwen3-TTS 1.7B | ≈ 8.5 秒 / 句（首句含加载 19 秒） |
 | 字幕 + 预览视频 | 自研时间轴 + ffmpeg | 几秒 |
+
+**角色一致性的演进**（同一角色两个镜头的人脸相似度，SFace；不同的人 95% 低于 0.45）
+
+| 版本 | 做法 | 跨镜头相似度 | 整集出图 |
+|---|---|---|---|
+| v1 | MOSS-Image 文生图，靠文字描述外貌 | 0.26 | 16 分钟 |
+| v2 | + AI 质检，不合格换 seed 重画（最多 3 次） | 0.44 | 31 分钟 |
+| v3 | FLUX.2 klein 参考图生成（MOSS 定妆照） | 0.41 | 12.5 分钟 |
+| **v4** | **klein 定妆照（正脸 + 左右侧脸）+ klein 全流程** | **0.58** | **3.5 分钟** |
+
+关键结论（详见 [学习日志](docs/learning-log.md)）：换 seed 抽卡"能挑不能造"；参考图生成才能真正锁住长相；
+定妆照和剧照由同一个模型生成，风格统一后分数整体上升。人工标注显示常规镜头一致性 100% 获认可，大笑、怒吼等极端表情仍会"换脸"。
 
 ## 架构
 
@@ -33,7 +45,7 @@ flowchart LR
     end
     subgraph S2["② 定妆照 + 出图"]
         direction TB
-        a2["studio cast / image"] --> e2(["ComfyUI<br/>MOSS-Image"])
+        a2["studio cast / image"] --> e2(["ComfyUI<br/>FLUX.2 klein 4B"])
     end
     subgraph S3["③ AI 质检"]
         direction TB
