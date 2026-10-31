@@ -87,6 +87,24 @@ sequenceDiagram
     S->>S: 算时间轴 → 字幕 → ffmpeg 拼预览视频
 ```
 
+## 独立小工具
+
+除了流水线，仓库里还有两个随手用的命令（定义在 `shell/aliases.zsh`）：
+
+| 命令 | 引擎 | 用途 |
+|---|---|---|
+| `srt 视频.mp4` | mlx-whisper（whisper-large-v3-turbo） | 给**已有视频**自动出字幕：单行 ≤16 字、简体中文，批量 `srt *.mp4` |
+| `tts "台词" -v Vivian -i "紧张"` | mlx-audio（Qwen3-TTS） | 单句配音，试音色和语气 |
+
+> 为什么流水线里不用 Whisper？流水线的台词是已知的，字幕直接按"台词 + 配音时长"计算，比再识别一遍更准、更快；Whisper 用在没有文稿的现成视频上。
+
+启用：
+```bash
+brew install ffmpeg uv
+uv tool install mlx-whisper
+echo 'source ~/ai-tools/shell/aliases.zsh' >> ~/.zshrc && source ~/.zshrc
+```
+
 ## 目录结构
 
 ```
@@ -94,7 +112,8 @@ ai-tools/
 ├── README.md            ← 你在看的这个
 ├── config.toml          ← 所有配置：端口、模型、音色、字幕字数……
 ├── pyproject.toml       ← Python 依赖（用 uv 管理）
-├── tts.py               ← 命令行 tts 命令用的配音脚本（独立使用）
+├── tts.py               ← tts 命令用的单句配音脚本
+├── shell/aliases.zsh    ← srt / tts 快捷命令（mlx-whisper / Qwen3-TTS）
 ├── studio/              ← 流水线源码
 │   ├── cli.py           ← 命令入口：check / image / plan / run
 │   ├── pipeline.py      ← 流水线主流程
