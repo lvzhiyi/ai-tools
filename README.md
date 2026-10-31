@@ -124,6 +124,8 @@ ai-tools/
 │   ├── plan.py          ← LM Studio：剧本 → 分镜表
 │   ├── storyboard.py    ← 分镜表格式（角色 + 镜头）
 │   ├── qa.py            ← AI 自动质检：定妆照、打分、重画、报告
+│   ├── label.py         ← 人工标注页面（盲标"像不像"）
+│   ├── calibrate.py     ← 人脸相似度阈值校准（人工标注 + 对照组 + 分布图）
 │   ├── face.py          ← 人脸一致性（OpenCV YuNet + SFace）
 │   ├── vision.py        ← 看图质检（LM Studio 多模态模型）
 │   └── llm.py           ← OpenAI 兼容客户端（plan / vision 共用）
@@ -196,6 +198,10 @@ uv run studio run storyboards/example.json
 - **画面质检**：LM Studio 里的 gemma-4 看图，对照描述打 1~5 分并列出瑕疵；LM Studio 没开就自动跳过
 - **内存调度**：每一轮先让 ComfyUI 把图都画完 → 释放 → 再加载看图模型质检 → 卸载，避免几个大模型同时挤 24G
 - 不想质检：`uv run studio run ... --no-qa`
+- **阈值校准**（官方 0.363 是在真人照片上测的，AI 生成的脸要自己测）：
+  1. `uv run studio label storyboards/example.json`：浏览器里盲标"两张图像不像同一个角色"，作为正确答案
+  2. `uv run studio calibrate storyboards/example.json`：再生成一组"不同的人"作对照组，输出分布图、建议阈值，
+     以及"自动判断和人工判断的一致率"（`output/_calibrate/calibration.md`）
 
 ## 注意内存（24G）
 

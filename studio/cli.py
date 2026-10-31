@@ -6,6 +6,8 @@
   studio run storyboards/xxx.json      跑完整流水线 → output/（出图带 AI 质检）
   studio cast storyboards/xxx.json     只生成角色定妆照（质检用的"标准脸"）
   studio qa storyboards/xxx.json       只质检已有的图，不重画，出报告
+  studio label storyboards/xxx.json    人工标注"像不像同一个人"（校准用的正确答案）
+  studio calibrate storyboards/xxx.json  用人工标注 + 对照组校准人脸相似度阈值
 """
 from __future__ import annotations
 
@@ -128,6 +130,41 @@ def cmd_qa(cfg: dict, args) -> int:
     return 0
 
 
+def cmd_label(cfg: dict, args) -> int:
+    from .label import serve
+
+    sb, out = _load_sb(args.storyboard)
+    serve(sb, out, port=args.port)
+    return 0
+
+
+def cmd_calibrate(cfg: dict, args) -> int:
+    from .calibrate import run as calibrate
+    from .comfy import ComfyClient, ComfyError
+
+    sb, out = _load_sb(args.storyboard)
+    comfy = ComfyClient(cfg["comfy"])
+    try:
+        comfy.ping()
+    except ComfyError:
+        comfy = None  # 对照组都生成过了就不需要 ComfyUI
+    r = calibrate(sb, out, cfg, comfy, people=args.people)
+    s, d = r["same"], r["diff"]
+    print()
+    print(f"同一个人：{s['n']} 对，相似度 {s['min']:.2f} ~ {s['max']:.2f}（中位 {s['median']:.2f}）")
+    print(f"不同的人：{d['n']} 对，相似度 {d['min']:.2f} ~ {d['max']:.2f}（中位 {d['median']:.2f}）")
+    print(f"结论：{r['verdict']}")
+    cur = cfg.get("qa", {}).get("face_threshold", 0.40)
+    if r["separable"]:
+        print(f"建议阈值：{r['suggested']}（当前 config.toml 里是 {cur}）")
+    else:
+        print(f"建议阈值：不可靠（两组重叠太多），先别改 config.toml（当前 {cur}）")
+    for c in r["compare"]:
+        agree = f"   和你的判断一致 {c['agreement']:>4.0%}" if "agreement" in c else ""
+        print(f"  阈值 {c['threshold']:<6} 误拒 {c['false_reject_rate']:>4.0%}   误收 {c['false_accept_rate']:>4.0%}{agree}")
+    return 0
+
+
 def cmd_run(cfg: dict, args) -> int:
     from .pipeline import run
 
@@ -163,12 +200,20 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("storyboard")
     s.add_argument("--no-vision", action="store_true", help="只做人脸比对，不用看图模型")
 
+    s = sub.add_parser("label", help="人工标注：两张图像不像同一个人")
+    s.add_argument("storyboard")
+    s.add_argument("--port", type=int, default=8765)
+
+    s = sub.add_parser("calibrate", help="校准人脸相似度阈值")
+    s.add_argument("storyboard")
+    s.add_argument("--people", type=int, default=6, help="对照组人数（每人约 4 分钟）")
+
     args = p.parse_args(argv)
     cfg = load_config()
     if getattr(args, "no_qa", False):
         cfg.setdefault("qa", {})["enabled"] = False
     handler = {"check": cmd_check, "image": cmd_image, "plan": cmd_plan, "run": cmd_run,
-               "cast": cmd_cast, "qa": cmd_qa}[args.cmd]
+               "cast": cmd_cast, "qa": cmd_qa, "calibrate": cmd_calibrate, "label": cmd_label}[args.cmd]
     try:
         return handler(cfg, args)
     except KeyboardInterrupt:

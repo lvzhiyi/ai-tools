@@ -29,9 +29,9 @@ silent_shot_sec = 2.0      # 没有台词的镜头默认时长
 
 [qa]
 enabled = true             # 出图后自动质检，不合格换 seed 重画
-max_attempts = 3           # 每个镜头最多画几次
+max_attempts = 2           # 每个镜头最多画几次
 face = true                # 人脸一致性（和角色定妆照比对）
-face_threshold = 0.40      # SFace 余弦相似度，>= 算同一个人（官方参考 0.363，先偏严，按报告数据再调）
+face_threshold = 0.45      # 校准结果：不同的人 95% 低于 0.45（见 output/_calibrate/calibration.md）
 vision = true              # 用 LM Studio 的看图模型检查画面（要先打开 LM Studio Server）
 vision_model = "google/gemma-4-e4b"
 vision_min_score = 3       # 画面符合度 1~5，低于它算不合格
