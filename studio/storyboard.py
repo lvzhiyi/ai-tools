@@ -4,16 +4,24 @@
 {
   "title": "第一集",
   "defaults": {"voice": "Vivian"},
+  "characters": {
+    "linxia": {"name": "林夏", "look": "a young East Asian woman with ..., wearing ...", "ref": "可选：定妆照路径"}
+  },
   "shots": [
-    {"id": 1, "image": "画面描述", "line": "台词", "voice": "Vivian", "emotion": "紧张", "seed": 123}
+    {"id": 2, "image": "Cinematic ... {linxia} looks back ...", "characters": ["linxia"],
+     "line": "台词", "voice": "Vivian", "emotion": "紧张", "seed": 123, "duration": 2.5}
   ]
 }
-image 必填；line / voice / emotion / seed / duration 选填。
+image 必填，其余选填。image 里的 {角色id} 会被替换成该角色的 look，保证每个镜头外貌描述一致；
+写了 {角色id} 的角色会自动加进 characters（用于人脸一致性质检）。
 """
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
+
+_PLACEHOLDER = re.compile(r"\{([A-Za-z_][\w-]*)\}")
 
 
 def load(path: Path) -> dict:
@@ -23,6 +31,14 @@ def load(path: Path) -> dict:
         sb = {"shots": sb}
     sb.setdefault("title", path.stem)
     sb.setdefault("defaults", {})
+    chars = sb.get("characters") or {}
+    if isinstance(chars, list):  # 也接受数组格式
+        chars = {c["id"]: c for c in chars}
+    sb["characters"] = chars
+    for cid, c in chars.items():
+        if not c.get("look"):
+            raise ValueError(f"角色 {cid} 缺少 look（外貌描述）")
+
     shots = sb.get("shots") or []
     if not shots:
         raise ValueError(f"{path} 里没有镜头（shots 为空）")
@@ -32,7 +48,24 @@ def load(path: Path) -> dict:
             raise ValueError(f"第 {s['id']} 个镜头缺少 image（画面描述）")
         for k, v in sb["defaults"].items():
             s.setdefault(k, v)
+        used = _PLACEHOLDER.findall(s["image"])
+        unknown = [u for u in used if u not in chars]
+        if unknown:
+            raise ValueError(f"第 {s['id']} 个镜头用了未定义的角色：{unknown}")
+        listed = list(s.get("characters") or [])
+        for u in used:
+            if u not in listed:
+                listed.append(u)
+        bad = [c for c in listed if c not in chars]
+        if bad:
+            raise ValueError(f"第 {s['id']} 个镜头的 characters 里有未定义的角色：{bad}")
+        s["characters"] = listed
     return sb
+
+
+def render_prompt(shot: dict, characters: dict) -> str:
+    """把 {角色id} 替换成外貌描述，得到最终送给出图模型的提示词。"""
+    return _PLACEHOLDER.sub(lambda m: characters[m.group(1)]["look"], shot["image"])
 
 
 def shot_name(shot: dict) -> str:

@@ -3,6 +3,12 @@
   "defaults": {
     "voice": "Vivian"
   },
+  "characters": {
+    "linxia": {
+      "name": "林夏",
+      "look": "a 25-year-old East Asian woman with an oval face, shoulder-length straight black hair with soft bangs, natural makeup, wearing a beige double-breasted trench coat over a black turtleneck"
+    }
+  },
   "shots": [
     {
       "id": 1,
@@ -12,7 +18,7 @@
     },
     {
       "id": 2,
-      "image": "Cinematic vertical film still of a young East Asian woman with shoulder-length black hair, wearing a beige trench coat, looking back over her shoulder toward the camera with a startled, frightened expression, rain-soaked neon city street at night, medium shot, shallow depth of field, 35mm film look.",
+      "image": "Cinematic vertical film still of {linxia}, looking back over her shoulder toward the camera with a startled, frightened expression, rain-soaked neon city street at night, medium shot, shallow depth of field, 35mm film look.",
       "line": "有人在跟着我……从地铁站出来就一直在。",
       "voice": "Vivian",
       "emotion": "紧张，压低声音，带一点颤抖"
@@ -26,7 +32,7 @@
     },
     {
       "id": 4,
-      "image": "Cinematic vertical film still, close-up of a young East Asian woman with shoulder-length black hair in a beige trench coat, holding a glowing smartphone near her face, rain droplets on her cheeks, neon reflections in her eyes, determined expression, night, 35mm film look.",
+      "image": "Cinematic vertical film still, close-up of {linxia}, holding a glowing smartphone to her ear, rain droplets on her cheeks, neon reflections in her eyes, determined expression, night street, 35mm film look.",
       "line": "喂，110吗？我在长顺街，有人一直跟踪我。",
       "voice": "Vivian",
       "emotion": "急促，强装镇定"

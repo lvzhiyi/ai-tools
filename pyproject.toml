@@ -6,6 +6,8 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "mlx-audio",   # 本地配音（Qwen3-TTS，Apple Silicon）
     "soundfile",   # 读取音频时长、合并音频
+    "opencv-python-headless",  # 人脸检测/比对（YuNet + SFace）、图片缩放
+    "numpy",
 ]
 
 [project.scripts]

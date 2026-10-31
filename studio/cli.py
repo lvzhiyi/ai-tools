@@ -3,7 +3,9 @@
   studio check                         检查环境（ComfyUI / LM Studio / ffmpeg / 配音模型）
   studio image "画面描述"               只出一张图，快速试提示词
   studio plan 剧本.txt                  用 LM Studio 把剧本拆成分镜表 → storyboards/
-  studio run storyboards/xxx.json      跑完整流水线 → output/
+  studio run storyboards/xxx.json      跑完整流水线 → output/（出图带 AI 质检）
+  studio cast storyboards/xxx.json     只生成角色定妆照（质检用的"标准脸"）
+  studio qa storyboards/xxx.json       只质检已有的图，不重画，出报告
 """
 from __future__ import annotations
 
@@ -43,6 +45,13 @@ def cmd_check(cfg: dict, _args) -> int:
 
     print("✅ ffmpeg 已安装" if has_ffmpeg() else "❌ 没有 ffmpeg：brew install ffmpeg")
     try:
+        from .face import FaceMatcher
+        FaceMatcher()
+        print("✅ 人脸比对模型可用（OpenCV YuNet + SFace）")
+    except Exception as e:
+        ok = False
+        print(f"❌ 人脸比对模型不可用：{e}")
+    try:
         import mlx_audio  # noqa: F401
         print("✅ mlx-audio 已安装（配音可用）")
     except ImportError:
@@ -75,6 +84,50 @@ def cmd_plan(cfg: dict, args) -> int:
     return 0
 
 
+def _load_sb(path: str):
+    from . import storyboard as sbmod
+    from .pipeline import project_dir
+
+    sb = sbmod.load(Path(path))
+    out = project_dir(sb)
+    out.mkdir(parents=True, exist_ok=True)
+    return sb, out
+
+
+def cmd_cast(cfg: dict, args) -> int:
+    from .comfy import ComfyClient
+    from .face import FaceMatcher
+    from .qa import ensure_cast
+
+    sb, out = _load_sb(args.storyboard)
+    if not sb["characters"]:
+        print("分镜表里没有定义 characters，不需要定妆照")
+        return 0
+    comfy = ComfyClient(cfg["comfy"])
+    comfy.ping()
+    refs = ensure_cast(sb, out, comfy, FaceMatcher(), force=args.force)
+    for cid, p in refs.items():
+        print(f"✅ {cid}：{p}")
+    print("满意就保留；不满意加 --force 重画，或在分镜表里给角色指定 ref（自己挑的图）")
+    return 0
+
+
+def cmd_qa(cfg: dict, args) -> int:
+    from .comfy import ComfyClient, ComfyError
+    from .qa import inspect_existing
+
+    sb, out = _load_sb(args.storyboard)
+    if args.no_vision:
+        cfg.setdefault("qa", {})["vision"] = False
+    comfy = ComfyClient(cfg["comfy"])
+    try:
+        comfy.ping()
+    except ComfyError:
+        comfy = None  # 定妆照都已存在时不需要 ComfyUI
+    inspect_existing(sb, out, cfg, comfy)
+    return 0
+
+
 def cmd_run(cfg: dict, args) -> int:
     from .pipeline import run
 
@@ -100,10 +153,22 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("storyboard")
     s.add_argument("--only", choices=["images", "audio", "subtitle", "video"], help="只跑某一步")
     s.add_argument("--force", action="store_true", help="已有文件也重新生成")
+    s.add_argument("--no-qa", action="store_true", help="关闭 AI 质检（只画一次）")
+
+    s = sub.add_parser("cast", help="生成角色定妆照")
+    s.add_argument("storyboard")
+    s.add_argument("--force", action="store_true", help="重画定妆照")
+
+    s = sub.add_parser("qa", help="质检已有的图（不重画）")
+    s.add_argument("storyboard")
+    s.add_argument("--no-vision", action="store_true", help="只做人脸比对，不用看图模型")
 
     args = p.parse_args(argv)
     cfg = load_config()
-    handler = {"check": cmd_check, "image": cmd_image, "plan": cmd_plan, "run": cmd_run}[args.cmd]
+    if getattr(args, "no_qa", False):
+        cfg.setdefault("qa", {})["enabled"] = False
+    handler = {"check": cmd_check, "image": cmd_image, "plan": cmd_plan, "run": cmd_run,
+               "cast": cmd_cast, "qa": cmd_qa}[args.cmd]
     try:
         return handler(cfg, args)
     except KeyboardInterrupt:

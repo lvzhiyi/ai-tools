@@ -27,9 +27,13 @@ def _log(msg: str) -> None:
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
+def project_dir(sb: dict) -> Path:
+    return ROOT / "output" / _slug(sb["title"])
+
+
 def run(sb_path: Path, cfg: dict, only: str | None = None, force: bool = False) -> Path:
     sb = sbmod.load(sb_path)
-    out = ROOT / "output" / _slug(sb["title"])
+    out = project_dir(sb)
     (out / "images").mkdir(parents=True, exist_ok=True)
     (out / "audio").mkdir(parents=True, exist_ok=True)
     shutil.copy(sb_path, out / "storyboard.json")
@@ -37,18 +41,13 @@ def run(sb_path: Path, cfg: dict, only: str | None = None, force: bool = False) 
     stages = [only] if only else list(STAGES)
     _log(f"项目「{sb['title']}」，共 {len(shots)} 个镜头 → {out}")
 
-    # 1. 出图
+    # 1. 出图（带 AI 质检：不合格自动重画）
     if "images" in stages:
+        from .qa import produce_images
         comfy = ComfyClient(cfg["comfy"])
         comfy.ping()
-        todo = [s for s in shots if force or not (out / "images" / f"{sbmod.shot_name(s)}.png").exists()]
-        _log(f"出图：{len(todo)} 张待生成（已有 {len(shots) - len(todo)} 张跳过）")
-        for i, s in enumerate(todo, 1):
-            t0 = time.time()
-            path = out / "images" / f"{sbmod.shot_name(s)}.png"
-            comfy.generate(s["image"], path, seed=s.get("seed"))
-            _log(f"  [{i}/{len(todo)}] 镜头 {sbmod.shot_name(s)} 完成，用时 {time.time() - t0:.0f}s")
-        if todo and len(stages) > 1:
+        produce_images(sb, out, cfg, comfy, force=force)
+        if len(stages) > 1:
             _log("释放 ComfyUI 内存，给配音模型腾地方")
             comfy.free()
 

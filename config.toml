@@ -27,7 +27,17 @@ fps = 30
 pad_sec = 0.4              # 每句台词后留白（秒）
 silent_shot_sec = 2.0      # 没有台词的镜头默认时长
 
+[qa]
+enabled = true             # 出图后自动质检，不合格换 seed 重画
+max_attempts = 3           # 每个镜头最多画几次
+face = true                # 人脸一致性（和角色定妆照比对）
+face_threshold = 0.40      # SFace 余弦相似度，>= 算同一个人（官方参考 0.363，先偏严，按报告数据再调）
+vision = true              # 用 LM Studio 的看图模型检查画面（要先打开 LM Studio Server）
+vision_model = "google/gemma-4-e4b"
+vision_min_score = 3       # 画面符合度 1~5，低于它算不合格
+
 [lmstudio]
 url = "http://127.0.0.1:1234/v1"
 # 在 LM Studio 的 Developer 页面看模型名；中文剧本建议换成 Qwen 14B 级别
 model = "google/gemma-4-e4b"
+ttl_sec = 300              # 模型空闲多少秒后 LM Studio 自动卸载
