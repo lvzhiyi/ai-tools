@@ -5,6 +5,7 @@
   studio plan 剧本.txt                  用 LM Studio 把剧本拆成分镜表 → storyboards/
   studio run storyboards/xxx.json      跑完整流水线 → output/（出图带 AI 质检）
   studio cast storyboards/xxx.json     只生成角色定妆照（质检用的"标准脸"）
+  studio runs                          查看运行历史：每次的耗时、通过率，和上一次对比
   studio qa storyboards/xxx.json       只质检已有的图，不重画，出报告
   studio label storyboards/xxx.json    人工标注"像不像同一个人"（校准用的正确答案）
   studio calibrate storyboards/xxx.json  用人工标注 + 对照组校准人脸相似度阈值
@@ -182,10 +183,29 @@ def cmd_calibrate(cfg: dict, args) -> int:
     return 0
 
 
+def cmd_runs(cfg: dict, args) -> int:
+    from .metrics import read_history
+
+    rows = read_history(args.project)[-args.n:]
+    if not rows:
+        print("还没有运行记录（每次 studio run 会自动记录到 output/runs.csv）")
+        return 0
+    f = lambda v: "-" if v in ("", None) else (f"{float(v) / 60:.1f}m" if float(v) >= 90 else f"{float(v):.0f}s")  # noqa: E731
+    print(f"{'时间':<17} {'项目':<10} {'git':<12} {'状态':<4} {'文生图':<10} {'总耗时':>6} {'出图':>6} {'配音':>6} {'每张图':>6} {'一次通过':>6}")
+    for r in rows:
+        print(f"{r['time'][5:16]:<17} {r['project'][:10]:<10} {r['git'][:12]:<12} {'✅' if r['status'] == 'ok' else '❌':<4} "
+              f"{r['t2i'][:10]:<10} {f(r['total_sec']):>6} {f(r['images_sec']):>6} {f(r['audio_sec']):>6} "
+              f"{f(r['avg_image_sec']):>6} {r['first_pass']:>6}")
+    print("\n每次运行的详细报告：output/<项目>/runs/<时间>/report.md")
+    return 0
+
+
 def cmd_run(cfg: dict, args) -> int:
     from .pipeline import run
 
-    run(Path(args.storyboard), cfg, only=args.only, force=args.force)
+    import sys
+    run(Path(args.storyboard), cfg, only=args.only, force=args.force,
+        command="studio " + " ".join(sys.argv[1:]))
     return 0
 
 
@@ -210,6 +230,10 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--no-qa", action="store_true", help="关闭 AI 质检（只画一次）")
     s.add_argument("--no-edit", action="store_true", help="不用参考图编辑，全部文生图（做对比实验用）")
 
+    s = sub.add_parser("runs", help="查看运行历史（耗时、通过率）")
+    s.add_argument("--project", help="只看某个项目（分镜表里的 title）")
+    s.add_argument("-n", type=int, default=15, help="显示最近几次")
+
     s = sub.add_parser("cast", help="生成角色定妆照")
     s.add_argument("storyboard")
     s.add_argument("--force", action="store_true", help="重画定妆照")
@@ -233,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
     if getattr(args, "no_edit", False) and isinstance(cfg["comfy"].get("edit"), dict):
         cfg["comfy"]["edit"]["enabled"] = False
     handler = {"check": cmd_check, "image": cmd_image, "plan": cmd_plan, "run": cmd_run,
-               "cast": cmd_cast, "qa": cmd_qa, "calibrate": cmd_calibrate, "label": cmd_label}[args.cmd]
+               "cast": cmd_cast, "qa": cmd_qa, "calibrate": cmd_calibrate, "label": cmd_label, "runs": cmd_runs}[args.cmd]
     try:
         return handler(cfg, args)
     except KeyboardInterrupt:

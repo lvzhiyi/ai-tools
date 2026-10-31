@@ -138,6 +138,8 @@ ai-tools/
 │   ├── qa.py            ← AI 自动质检：定妆照、打分、重画、报告
 │   ├── label.py         ← 人工标注页面（盲标"像不像"）
 │   ├── calibrate.py     ← 人脸相似度阈值校准（人工标注 + 对照组 + 分布图）
+│   ├── samples.py       ← 收集角色的所有图（标注、校准共用）
+│   ├── metrics.py       ← 可观测性：耗时记录、运行报告、历史对比
 │   ├── face.py          ← 人脸一致性（OpenCV YuNet + SFace）
 │   ├── vision.py        ← 看图质检（LM Studio 多模态模型）
 │   └── llm.py           ← OpenAI 兼容客户端（plan / vision 共用）
@@ -209,13 +211,24 @@ uv run studio run storyboards/example.json
 - **定妆照**：每个角色自动生成正脸 + 左右 3/4 侧脸三张，也可以用 `ref` 指定自己挑的图；`uv run studio cast` 可以单独重画
 - **人脸一致性**：OpenCV SFace 算余弦相似度，≥ `face_threshold` 算同一个人。参照取"定妆照三个角度 + 本集已通过的镜头"里最像的一个，
   避免中景、侧脸镜头被正脸定妆照误判；报告里记录每张脸的大小和转向，方便分析景别对分数的影响
-- **画面质检**：LM Studio 里的 gemma-4 看图，对照描述打 1~5 分并列出瑕疵；LM Studio 没开就自动跳过
+- **画面质检**：LM Studio 里的 gemma-4 看图，对照描述打 1~5 分并列出瑕疵；表情夸张（大笑闭眼、张嘴怒吼）的镜头标 👀 提醒人工复核；LM Studio 没开就自动跳过
 - **内存调度**：每一轮先让 ComfyUI 把图都画完 → 释放 → 再加载看图模型质检 → 卸载，避免几个大模型同时挤 24G
 - 不想质检：`uv run studio run ... --no-qa`
 - **阈值校准**（官方 0.363 是在真人照片上测的，AI 生成的脸要自己测）：
-  1. `uv run studio label storyboards/example.json`：浏览器里盲标"两张图像不像同一个角色"，作为正确答案
-  2. `uv run studio calibrate storyboards/example.json`：再生成一组"不同的人"作对照组，输出分布图、建议阈值，
+  0. `uv run studio run storyboards/calibration.json --only images --no-qa`：校准专用分镜表，同一角色 8 种景别/表情，关掉质检拿到未筛选的样本
+  1. `uv run studio label storyboards/calibration.json`：浏览器里盲标"两张图像不像同一个角色"，作为正确答案（标注带内容指纹，图重画后旧标注自动失效）
+  2. `uv run studio calibrate storyboards/calibration.json`：再生成一组"不同的人"作对照组，输出分布图、建议阈值，
      以及"自动判断和人工判断的一致率"（`output/_calibrate/calibration.md`）
+
+## 可观测性：每次运行自动出报告
+
+每次 `studio run` 都会记录各阶段耗时、每张图 / 每句配音的耗时、重画次数和质检结果（失败也会记录）：
+
+- `output/<项目>/runs/<时间>/report.md`：总耗时和各阶段占比、最慢的 5 步、质检通过率、配音实时率，以及**和同一条命令上一次运行的对比**
+- `output/<项目>/runs/<时间>/metrics.json`：原始数据
+- `output/runs.csv`：所有运行的历史（含 git 版本、所用模型），`uv run studio runs` 在终端里查看
+
+改了模型、参数或代码之后再跑一次，就能用数据看到是快了还是慢了。
 
 ## 注意内存（24G）
 

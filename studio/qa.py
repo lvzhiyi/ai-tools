@@ -26,7 +26,7 @@ def _log(msg: str) -> None:
 
 
 # ---------------------------------------------------------------- 定妆照
-def ensure_cast(sb: dict, out: Path, comfy, faces, force: bool = False) -> dict[str, Path]:
+def ensure_cast(sb: dict, out: Path, comfy, faces, force: bool = False, metrics=None) -> dict[str, Path]:
     """每个角色一张定妆照：分镜表里给了 ref 就用它，否则自动生成到 output/<项目>/cast/。"""
     refs: dict[str, Path] = {}
     cast_dir = out / "cast"
@@ -47,6 +47,8 @@ def ensure_cast(sb: dict, out: Path, comfy, faces, force: bool = False) -> dict[
         for attempt in range(1, 4):
             t0 = time.time()
             comfy.generate(PORTRAIT.format(look=c["look"]), p)
+            if metrics:
+                metrics.event("cast", character=cid, sec=round(time.time() - t0, 2))
             if faces is None or faces.features(p):
                 _log(f"  定妆照 {cid}（{c.get('name', '')}）完成，用时 {time.time() - t0:.0f}s → {p.relative_to(ROOT)}")
                 break
@@ -65,7 +67,7 @@ ANGLE_PROMPT = ("The same person from the reference image, {angle}, eyes looking
                 "same hairstyle and clothing, plain grey studio background, soft even lighting, head and shoulders portrait.")
 
 
-def cast_angles(sb: dict, out: Path, front: dict[str, Path], editor, force: bool = False,
+def cast_angles(sb: dict, out: Path, front: dict[str, Path], editor, force: bool = False, metrics=None,
                 faces=None, threshold: float = 0.45) -> dict[str, list[tuple[str, Path]]]:
     """在正脸定妆照基础上，用参考图编辑再画左右 3/4 侧脸，让侧脸镜头有对应角度的参照。
     侧脸照本身也要和正脸比一次：如果画歪了（不像正脸那个人），参照就会带偏后面所有镜头，所以不合格就重画。"""
@@ -80,6 +82,8 @@ def cast_angles(sb: dict, out: Path, front: dict[str, Path], editor, force: bool
                 for attempt in range(1, 4):
                     t0 = time.time()
                     editor.generate(ANGLE_PROMPT.format(angle=desc), ap, ref_image=p)
+                    if metrics:
+                        metrics.event("cast_angle", character=f"{cid}-{key}", sec=round(time.time() - t0, 2))
                     found = faces.features(ap) if faces else [None]
                     sim = faces.best_match(front_feat, found) if faces else None
                     note = f"，和正脸相似度 {sim:.2f}" if sim is not None else ""
@@ -205,7 +209,7 @@ def _plan_shot(s: dict, sb: dict, refs: dict, editor) -> tuple:
     return "t2i", None, sbmod.render_prompt(s, sb["characters"]), None
 
 
-def produce_images(sb: dict, out: Path, cfg: dict, comfy, force: bool = False, editor=None) -> dict:
+def produce_images(sb: dict, out: Path, cfg: dict, comfy, force: bool = False, editor=None, metrics=None) -> dict:
     """comfy：文生图客户端；editor：参考图编辑客户端（没配置就是 None，全部走文生图）。"""
     q = cfg.get("qa", {})
     shots = sb["shots"]
@@ -220,13 +224,18 @@ def produce_images(sb: dict, out: Path, cfg: dict, comfy, force: bool = False, e
         from .face import FaceMatcher
         faces = FaceMatcher()
     # 定妆照：质检要用它比对，编辑模式要用它当参考图
-    refs = ensure_cast(sb, out, comfy, faces) if sb["characters"] and (q.get("enabled", True) or editor) else {}
+    from .metrics import NULL
+    m = metrics or NULL
+    refs = ensure_cast(sb, out, comfy, faces, metrics=metrics) if sb["characters"] and (q.get("enabled", True) or editor) else {}
 
-    def draw(s: dict, path: Path, seed) -> str:
+    def draw(s: dict, path: Path, seed, rnd: int = 1) -> str:
         mode, cid, prompt, ref = _plan_shot(s, sb, refs, editor)
         client = editor if mode == "edit" else comfy
+        t0 = time.time()
         client.generate(prompt, path, seed=seed, ref_image=ref)
-        return "参考图" if mode == "edit" else "文生图"
+        how = "参考图" if mode == "edit" else "文生图"
+        m.event("image", shot=sbmod.shot_name(s), mode=how, round=rnd, sec=round(time.time() - t0, 2))
+        return how
 
     if not q.get("enabled", True):  # 关闭质检：一张画完就算
         for i, s in enumerate(todo, 1):
@@ -235,7 +244,7 @@ def produce_images(sb: dict, out: Path, cfg: dict, comfy, force: bool = False, e
             _log(f"  [{i}/{len(todo)}] 镜头 {sbmod.shot_name(s)}（{how}）完成，用时 {time.time() - t0:.0f}s")
         return {}
 
-    angle_refs = cast_angles(sb, out, refs, editor if q.get("cast_angles", True) else None,
+    angle_refs = cast_angles(sb, out, refs, editor if q.get("cast_angles", True) else None, metrics=metrics,
                              faces=faces, threshold=float(q.get("angle_threshold", 0.35)))
     inspector = Inspector(cfg, sb, angle_refs, faces, use_vision=q.get("vision", True))
 
@@ -261,7 +270,7 @@ def produce_images(sb: dict, out: Path, cfg: dict, comfy, force: bool = False, e
             name = sbmod.shot_name(s)
             cand = cand_dir / f"{name}_{rnd}.png"
             t0 = time.time()
-            how = draw(s, cand, s.get("seed") if rnd == 1 else None)
+            how = draw(s, cand, s.get("seed") if rnd == 1 else None, rnd)
             _log(f"  [{i}/{len(pending)}] 镜头 {name}（{how}）画好，用时 {time.time() - t0:.0f}s")
             made.append((s, cand, time.time() - t0, how))
 
@@ -274,6 +283,8 @@ def produce_images(sb: dict, out: Path, cfg: dict, comfy, force: bool = False, e
             t0 = time.time()
             r = inspector.inspect(s, cand)
             r.update(round=rnd, gen_sec=round(gen_sec, 1), qa_sec=round(time.time() - t0, 1), mode=how)
+            m.event("qa", shot=name, round=rnd, sec=r["qa_sec"], passed=r["passed"], review=bool(r.get("review")),
+                    face={k: v for k, v in r["face"].items()})
             report[name]["attempts"].append(r)
             face_txt = " ".join(f"{k}={v}" + (f"(比对{r['face_ref'][k]})" if k in r.get("face_ref", {}) else "")
                                 for k, v in r["face"].items())
