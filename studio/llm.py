@@ -8,11 +8,11 @@ from __future__ import annotations
 import base64
 import json
 import http.client
-import logging
 import os
 import re
 import shutil
 import subprocess
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -25,11 +25,15 @@ class LLMError(RuntimeError):
     pass
 
 
+def _log(message: str) -> None:
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
+
+
 def cloud_status(cfg: dict, *, vision: bool = False) -> tuple[bool, str]:
     """只检查云端配置，不发送请求；看图必须显式指定支持图片的模型。"""
     cloud = cfg.get("cloud", {})
     if not cloud.get("enabled", False):
-        return False, "未启用（仅使用本地模型）"
+        return False, "未启用云端"
     try:
         url = urlsplit(cloud.get("url", ""))
     except ValueError:
@@ -114,26 +118,46 @@ def chat(cfg: dict, messages: list[dict], schema: dict | None = None, *,
         isinstance(p, dict) and p.get("type") == "image_url" for p in m["content"]
     ) for m in messages)
 
+    task = "看图质检" if vision else "文本生成"
+
+    def request_endpoint(endpoint: dict, chosen_model: str, *, cloud: bool):
+        provider = "云端" if cloud else "本地 LM Studio"
+        # 只记录路由元数据，不记录消息内容、响应正文、URL 或鉴权信息。
+        safe_model = str(chosen_model).replace("\r", " ").replace("\n", " ")
+        description = f"{task}｜{provider}｜模型 {safe_model}"
+        started = time.monotonic()
+        _log(f"模型调用开始：{description}")
+        try:
+            result = _request(endpoint, messages, schema, model=chosen_model,
+                              temperature=temperature, timeout=timeout, cloud=cloud, validator=validator)
+        except LLMError as error:
+            _log(f"模型调用失败：{description}｜{error}（耗时 {time.monotonic() - started:.1f}s）")
+            raise
+        except KeyboardInterrupt:
+            _log(f"模型调用中断：{description}（耗时 {time.monotonic() - started:.1f}s）")
+            raise
+        _log(f"模型调用成功：{description}（耗时 {time.monotonic() - started:.1f}s）")
+        return result
+
     def request_cloud():
         ready, reason = cloud_status(cfg, vision=vision)
         if not ready:
+            _log(f"模型未调用：{task}｜云端｜{reason}")
             raise LLMError(f"云端不可用：{reason}")
         cloud = cfg["cloud"]
-        return _request(cloud, messages, schema, model=cloud["vision_model" if vision else "model"],
-                        temperature=temperature, timeout=timeout, cloud=True, validator=validator)
+        return request_endpoint(cloud, cloud["vision_model" if vision else "model"], cloud=True)
 
     if mode == "cloud":
         return request_cloud()
     try:
-        return _request(cfg, messages, schema, model=model or cfg["model"],
-                        temperature=temperature, timeout=timeout, cloud=False, validator=validator)
+        return request_endpoint(cfg, model or cfg["model"], cloud=False)
     except LLMError as local_error:
         if mode == "local":
             raise
         ready, reason = cloud_status(cfg, vision=vision)
         if not ready:
             raise LLMError(f"{local_error}；云端不可用：{reason}") from None
-        logging.getLogger(__name__).warning("%s；切换云端兜底%s", local_error, "（含图片）" if vision else "")
+        _log(f"模型路由：{task}｜本地失败，切换云端兜底")
         try:
             return request_cloud()
         except LLMError as cloud_error:

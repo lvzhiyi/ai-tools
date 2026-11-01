@@ -252,6 +252,10 @@ def main(argv: list[str] | None = None) -> int:
         cfg.setdefault("qa", {})["enabled"] = False
     if getattr(args, "no_edit", False) and isinstance(cfg["comfy"].get("edit"), dict):
         cfg["comfy"]["edit"]["enabled"] = False
+    if args.cmd in {"plan", "run", "qa", "calibrate"}:
+        mode = cfg["lmstudio"].get("routing_mode", "auto")
+        label = {"local": "仅本地", "cloud": "仅云端", "auto": "本地优先、云端兜底"}.get(mode, "未知模式")
+        print(f"[{time.strftime('%H:%M:%S')}] 模型路由：{label}（用于拆分镜和看图质检；出图由 ComfyUI 执行）", flush=True)
     handler = {"check": cmd_check, "image": cmd_image, "plan": cmd_plan, "run": cmd_run,
                "cast": cmd_cast, "qa": cmd_qa, "calibrate": cmd_calibrate, "label": cmd_label, "runs": cmd_runs, "i2v": cmd_i2v, "web": cmd_web}[args.cmd]
     try:

@@ -10,6 +10,7 @@ import re
 import shutil
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from . import storyboard as sbmod
 from . import subtitle, video
@@ -84,6 +85,8 @@ def _images(sb: dict, out: Path, cfg: dict, force: bool, m, free_after: bool) ->
     from .qa import produce_images
 
     comfy = ComfyClient(cfg["comfy"])
+    source = "本地" if urlsplit(comfy.url).hostname in {"localhost", "127.0.0.1", "::1"} else "远程"
+    _log(f"出图引擎：{source} ComfyUI｜文生图工作流 {comfy.profile}")
     comfy.ping()
     editor = make_editor(cfg["comfy"])
     _log("有角色的镜头：" + ("参考图编辑（照着定妆照画）" if editor else "文生图"))
