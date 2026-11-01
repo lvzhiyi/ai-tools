@@ -1,23 +1,27 @@
 # ai-tools · 本地 AI 短剧工作台
 
-一台 MacBook Pro（M5 Pro / 24G），全本地、零 API 费用，把**剧本**变成**分镜图 + 配音 + 字幕 + 预览视频**，并用 AI 自动质检保证角色前后一致。
+一台 MacBook Pro（M5 Pro / 24G），全本地、零 API 费用，把**剧本**变成**分镜图 + 动态镜头 + 配音 + 字幕 + 预览视频**，并用 AI 自动质检保证角色前后一致（动起来以后也检查）。
 
 ## 演示
 
 <p align="center">
-  <img src="docs/assets/demo.gif" width="300" alt="preview 演示">
+  <img src="docs/assets/demo.webp" width="300" alt="preview 演示：4 个镜头都由本地图生视频生成">
 </p>
 
 ![分镜总览](docs/assets/storyboard.jpg)
 
 > 示例剧本《雨夜》跑一遍流水线的产出：先生成角色的三角度定妆照，有角色的镜头照着定妆照画（FLUX.2 klein 参考图生成），
+> 每个镜头再由 LTX-2.3（MLX 本地运行）按 `motion` 动作描述生成 5 秒动态镜头，
 > 配音、字幕全部由本地模型生成，ffmpeg 自动拼成预览视频。带声音的完整预览：[docs/assets/preview.mp4](docs/assets/preview.mp4)
+> （加图生视频之前的静态版：[demo-v4-static.gif](docs/assets/demo-v4-static.gif)）
 
 **实测**（MacBook Pro M5 Pro / 24G）
 
 | 步骤 | 引擎 | 耗时 |
 |---|---|---|
 | 出图（768×1344） | ComfyUI + FLUX.2 klein 4B（4 步，参考图编辑） | ≈ 40~60 秒 / 张 |
+| 图生视频（448×768，5 秒） | ltx-2-mlx + LTX-2.3 int4（蒸馏版，float16 计算） | ≈ 72 秒 / 段，峰值显存 11 GB |
+| 图生视频（576×1024，5 秒） | 同上 | ≈ 128 秒 / 段，峰值显存 11.7 GB |
 | 配音 | mlx-audio + Qwen3-TTS 1.7B | ≈ 8.5 秒 / 句（首句含加载 19 秒） |
 | 字幕 + 预览视频 | 自研时间轴 + ffmpeg | 几秒 |
 
@@ -32,6 +36,16 @@
 
 关键结论（详见 [学习日志](docs/learning-log.md)）：换 seed 抽卡"能挑不能造"；参考图生成才能真正锁住长相；
 定妆照和剧照由同一个模型生成，风格统一后分数整体上升。人工标注显示常规镜头一致性 100% 获认可，大笑、怒吼等极端表情仍会"换脸"。
+
+**动起来以后脸会不会变**（v5：图生视频；每 6 帧抽 1 帧和定妆照比，只统计正脸 / 半侧脸的帧）
+
+| 镜头 | 分辨率 | 人脸最低 ~ 中位 | 说明 |
+|---|---|---|---|
+| 04 打电话（近景） | 448×768 | 0.59 ~ 0.63 | 不低于原图本身（0.62），没有"越动越不像" |
+| 02 回头（中景） | 448×768 | 0.35 ~ 0.48 👀 | 脸只有约 60 像素 + 惊恐张嘴 |
+| 02 回头（中景） | 576×1024 | **0.44** ~ 0.48 | 最低分回到阈值以上：低分辨率拖累的是最差的几帧 |
+
+转头、背影时分数下降是正常的（2 秒测试片段最后一帧转到后脑勺，分数 0.08），所以视频质检按偏航角跳过这些帧，否则会误报。
 
 ## 架构
 
@@ -56,17 +70,22 @@ flowchart LR
         direction TB
         a4["tts.py"] --> e4(["mlx-audio<br/>Qwen3-TTS"])
     end
-    subgraph S5["⑤ 字幕 + 预览"]
+    subgraph S5["⑤ 图生视频（可选）"]
+        direction TB
+        a5v["studio i2v"] --> e5v(["ltx-2-mlx<br/>LTX-2.3 int4"])
+        a5v --> e5f(["OpenCV SFace<br/>抽帧比人脸"])
+    end
+    subgraph S6["⑥ 字幕 + 预览"]
         direction TB
         a5["subtitle / video"] --> e5(["ffmpeg"])
     end
 
-    OUT["📦 定妆照 · 分镜图<br/>配音 · 字幕<br/>preview.mp4<br/>质检报告"]
+    OUT["📦 定妆照 · 分镜图<br/>动态镜头 · 配音 · 字幕<br/>preview.mp4<br/>质检 / 运行报告"]
 
-    IN --> S1 --> S2 --> S3 --> S4 --> S5 --> OUT
+    IN --> S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> OUT
 
     classDef engine fill:#eef6ff,stroke:#4a90d9,color:#1d3c5c
-    class e1,e2,e3,e3b,e4,e5 engine
+    class e1,e2,e3,e3b,e4,e5,e5v,e5f engine
 ```
 
 **设计思路：专用引擎 + 统一编排**
@@ -75,6 +94,8 @@ flowchart LR
   反例：同样 9B 的语言模型放在 ComfyUI 里跑（GPTQ 量化，在 Mac 上没有加速），8 分钟只走了 2%。
 - `studio` 是编排层：对外只有一个命令入口，负责任务调度、断点续跑（已有产物自动跳过）、失败重试和报告。
 - **24G 内存调度**：几个大模型轮流使用，而不是同时常驻。
+- **重量级引擎用子进程隔离**：图生视频引擎（ltx-2-mlx）装在独立目录、独立 uv 环境，`studio` 用子进程调用。
+  它依赖的 mlx 版本不会和配音的 mlx-audio 冲突；进程结束显存全部归还；以后换 Wan 2.2 等引擎，只需要实现同样的 `generate()` 接口。
 
 ```mermaid
 sequenceDiagram
@@ -84,6 +105,7 @@ sequenceDiagram
     participant F as OpenCV（人脸）
     participant L as LM Studio（看图）
     participant T as Qwen3-TTS（配音）
+    participant V as LTX-2.3（图生视频）
 
     S->>C: 生成角色定妆照
     loop 每一轮（最多 3 轮）
@@ -96,7 +118,15 @@ sequenceDiagram
     end
     S->>C: /free 释放内存
     S->>T: 逐句配音
-    S->>S: 算时间轴 → 字幕 → ffmpeg 拼预览视频
+    S->>S: 算时间轴（每个镜头多长）
+    opt --i2v
+        S->>C: /free；LM Studio 卸载模型
+        loop 每个镜头
+            S->>V: 子进程：图 + motion → 5 秒片段
+            S->>F: 抽帧比人脸（跳过侧脸 / 背影）
+        end
+    end
+    S->>S: 字幕 → ffmpeg 拼预览视频（有片段用片段，没有用静态图）
 ```
 
 ## 独立小工具
@@ -127,11 +157,12 @@ ai-tools/
 ├── tts.py               ← tts 命令用的单句配音脚本
 ├── shell/aliases.zsh    ← srt / tts 快捷命令（mlx-whisper / Qwen3-TTS）
 ├── studio/              ← 流水线源码
-│   ├── cli.py           ← 命令入口：check / image / plan / run
+│   ├── cli.py           ← 命令入口：check / image / plan / run / i2v / qa / runs ……
 │   ├── pipeline.py      ← 流水线主流程
 │   ├── comfy.py         ← ComfyUI API 客户端（出图）
 │   ├── tts.py           ← 配音（Qwen3-TTS / mlx-audio）
 │   ├── subtitle.py      ← 由台词 + 音频时长生成 SRT
+│   ├── i2v.py           ← 图生视频：LTX-2.3（子进程调用）+ 抽帧人脸质检
 │   ├── video.py         ← ffmpeg 拼预览视频
 │   ├── plan.py          ← LM Studio：剧本 → 分镜表
 │   ├── storyboard.py    ← 分镜表格式（角色 + 镜头）
@@ -149,7 +180,8 @@ ai-tools/
 ├── models/              ← 人脸模型（首次运行自动下载，不进 git）
 ├── output/              ← 生成结果，每个项目一个文件夹（不进 git）
 └── docs/
-    ├── assets/          ← README 用的演示 GIF / 分镜总览图 / 预览视频
+    ├── assets/          ← README 用的演示动图 / 分镜总览图 / 预览视频
+    ├── knowledge-map.html ← 模型知识图谱：用到的神经网络、模型及所在阶段
     ├── toolbox.md       ← 各工具速查：LM Studio / ComfyUI / srt / tts
     ├── roadmap.md       ← 后续学习和扩展路线
     └── learning-log.md  ← 学习日志
@@ -179,7 +211,20 @@ uv run studio qa storyboards/example.json
 uv run studio plan screenplays/example.txt
 #    打开 storyboards/example.json 检查修改，然后卸载 LM Studio 模型，再：
 uv run studio run storyboards/example.json
+
+# 4. 图生视频：每个镜头的图 → 动态镜头，然后自动重拼预览视频（图和配音要先有）
+uv run studio i2v storyboards/example.json              # 全部镜头（已有片段跳过）
+uv run studio i2v storyboards/example.json --shots 2,4 --force   # 只重做某几个
+uv run studio run storyboards/example.json --i2v        # 或者整条流水线一起跑
 ```
+
+**图生视频引擎**（一次性安装，约 30GB 下载）：
+```bash
+mkdir -p ~/ai-engines && cd ~/ai-engines
+git clone https://github.com/dgrauet/ltx-2-mlx.git && cd ltx-2-mlx && uv sync
+```
+分镜表里每个镜头写 `motion`（英文动作描述，例如 `"{linxia} slowly turns her head and glances back, camera pushes in"`），
+`studio plan` 拆分镜时会一起写。定位是"动态分镜"：本地快速看动作和节奏，定稿镜头再交给可灵 / 即梦。
 
 结果在 `output/<标题>/`：
 
@@ -188,7 +233,8 @@ uv run studio run storyboards/example.json
 | `images/01.png …` | 每个镜头的分镜图 |
 | `audio/01.wav …` | 每句台词的配音 |
 | `subtitles.srt` | 字幕（每条 ≤16 字，可在 config.toml 调） |
-| `preview.mp4` | 图片 + 配音 + 软字幕的预览视频，看节奏用 |
+| `clips/01.mp4 …` | 图生视频片段（`studio i2v`），同名 `.log` 是引擎日志 |
+| `preview.mp4` | 动态片段（没有就用图片）+ 配音 + 软字幕的预览视频，看节奏用 |
 | `timeline.json` | 每个镜头的起止时间 |
 | `cast/linxia.png` | 角色定妆照（人脸比对的"标准脸"） |
 | `qa_report.md` / `qa.json` | 质检报告：每个镜头画了几次、人脸相似度、画面分、瑕疵 |
@@ -224,7 +270,8 @@ uv run studio run storyboards/example.json
 
 每次 `studio run` 都会记录各阶段耗时、每张图 / 每句配音的耗时、重画次数和质检结果（失败也会记录）：
 
-- `output/<项目>/runs/<时间>/report.md`：总耗时和各阶段占比、最慢的 5 步、质检通过率、配音实时率，以及**和同一条命令上一次运行的对比**
+- `output/<项目>/runs/<时间>/report.md`：总耗时和各阶段占比、最慢的 5 步、质检通过率、配音实时率、
+  图生视频的"生成 1 秒视频要几秒"和峰值显存，以及**和同一条命令上一次运行的对比**
 - `output/<项目>/runs/<时间>/metrics.json`：原始数据
 - `output/runs.csv`：所有运行的历史（含 git 版本、所用模型），`uv run studio runs` 在终端里查看
 
@@ -233,6 +280,7 @@ uv run studio run storyboards/example.json
 ## 注意内存（24G）
 
 三个大模型不要同时开：**LM Studio 拆完分镜就卸载模型**；流水线出完图会自动让 ComfyUI 释放内存，再开始配音。
+图生视频峰值约 11~13GB，开始前会自动让 ComfyUI、LM Studio 卸载模型。
 
 ## 换出图模型
 
