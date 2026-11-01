@@ -7,6 +7,7 @@
   studio i2v storyboards/xxx.json      图生视频：每个镜头的图 → 几秒动态镜头（LTX-2.3，本地 MLX）
   studio cast storyboards/xxx.json     只生成角色定妆照（质检用的"标准脸"）
   studio runs                          查看运行历史：每次的耗时、通过率，和上一次对比
+  studio web                           打开网页控制台（http://127.0.0.1:8780）：编辑分镜、跑任务、看结果
   studio qa storyboards/xxx.json       只质检已有的图，不重画，出报告
   studio label storyboards/xxx.json    人工标注"像不像同一个人"（校准用的正确答案）
   studio calibrate storyboards/xxx.json  用人工标注 + 对照组校准人脸相似度阈值
@@ -23,65 +24,13 @@ from .config import ROOT, load_config
 
 
 def cmd_check(cfg: dict, _args) -> int:
-    from .comfy import ComfyClient, ComfyError
-    from .video import has_ffmpeg
+    from .checks import run
 
-    ok = True
-    try:
-        c = ComfyClient(cfg["comfy"])
-        stats = c.ping()
-        dev = (stats or {}).get("devices", [{}])[0].get("type", "?")
-        print(f"✅ ComfyUI 已连接（{cfg['comfy']['url']}，设备 {dev}）")
-        print(f"✅ 文生图工作流：{c.profile}（{c.cfg['workflow']}）")
-        for p in c.check_workflow():
-            ok = False
-            print(f"❌ {p}")
-        from .comfy import make_editor
-        ed = make_editor(cfg["comfy"])
-        if ed:
-            probs = ed.check_workflow()
-            for p in probs:
-                ok = False
-                print(f"❌ [edit] {p}")
-            if not probs:
-                print(f"✅ 参考图编辑工作流：{ed.cfg['workflow']}")
-        else:
-            print("⚪ 没有启用参考图编辑（config.toml 的 [comfy.edit]）")
-    except ComfyError as e:
-        ok = False
-        print(f"❌ {e}")
-
-    import urllib.request
-    try:
-        with urllib.request.urlopen(cfg["lmstudio"]["url"].rstrip("/") + "/models", timeout=3) as r:
-            models = [m["id"] for m in json.load(r).get("data", [])]
-        print(f"✅ LM Studio 已连接，可用模型：{', '.join(models) or '（无）'}")
-    except Exception:
-        print("⚪ LM Studio 没开（只有 studio plan 需要它）")
-
-    print("✅ ffmpeg 已安装" if has_ffmpeg() else "❌ 没有 ffmpeg：brew install ffmpeg")
-    from .i2v import make_engine
-    icfg = cfg.get("i2v", {})
-    probs = make_engine(icfg).check()
-    if probs:
-        print("⚪ 图生视频不可用（只有 --i2v / studio i2v 需要）：" + "；".join(probs))
-    else:
-        print(f"✅ 图生视频引擎：{icfg.get('engine_dir')}（{icfg.get('model')}）"
-              + ("" if icfg.get("enabled") else "，run 默认不跑，加 --i2v 开启"))
-    try:
-        from .face import FaceMatcher
-        FaceMatcher()
-        print("✅ 人脸比对模型可用（OpenCV YuNet + SFace）")
-    except Exception as e:
-        ok = False
-        print(f"❌ 人脸比对模型不可用：{e}")
-    try:
-        import mlx_audio  # noqa: F401
-        print("✅ mlx-audio 已安装（配音可用）")
-    except ImportError:
-        ok = False
-        print("❌ mlx-audio 没装好：在项目目录运行 uv sync")
-    return 0 if ok else 1
+    icon = {"ok": "✅", "warn": "⚪", "fail": "❌"}
+    items = run(cfg)
+    for it in items:
+        print(f"{icon[it['status']]} {it['name']}：{it['detail']}")
+    return 1 if any(it["status"] == "fail" for it in items) else 0
 
 
 def cmd_image(cfg: dict, args) -> int:
@@ -224,9 +173,18 @@ def cmd_i2v(cfg: dict, args) -> int:
     from .pipeline import run
 
     shots = {x.strip() for x in args.shots.split(",")} if args.shots else None
+    if args.seed is not None:
+        cfg.setdefault("i2v", {})["seed"] = args.seed
     command = "studio " + " ".join(sys.argv[1:])
     run(Path(args.storyboard), cfg, only="i2v", force=args.force, command=command, shots=shots)
     run(Path(args.storyboard), cfg, only="video", command=command + " (video)")
+    return 0
+
+
+def cmd_web(cfg: dict, args) -> int:
+    from .web.app import serve
+
+    serve(host=args.host, port=args.port, open_browser=not args.no_browser)
     return 0
 
 
@@ -256,6 +214,12 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("storyboard")
     s.add_argument("--shots", help="只做某几个镜头，如 2,4 或 02,04")
     s.add_argument("--force", action="store_true", help="已有片段也重新生成")
+    s.add_argument("--seed", type=int, help="换一个随机种子（同样的图和描述，换种子才会生成不同的动作）")
+
+    s = sub.add_parser("web", help="网页控制台")
+    s.add_argument("--port", type=int, default=8780)
+    s.add_argument("--host", default="127.0.0.1", help="只给本机用；局域网访问改成 0.0.0.0")
+    s.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
 
     s = sub.add_parser("runs", help="查看运行历史（耗时、通过率）")
     s.add_argument("--project", help="只看某个项目（分镜表里的 title）")
@@ -284,7 +248,7 @@ def main(argv: list[str] | None = None) -> int:
     if getattr(args, "no_edit", False) and isinstance(cfg["comfy"].get("edit"), dict):
         cfg["comfy"]["edit"]["enabled"] = False
     handler = {"check": cmd_check, "image": cmd_image, "plan": cmd_plan, "run": cmd_run,
-               "cast": cmd_cast, "qa": cmd_qa, "calibrate": cmd_calibrate, "label": cmd_label, "runs": cmd_runs, "i2v": cmd_i2v}[args.cmd]
+               "cast": cmd_cast, "qa": cmd_qa, "calibrate": cmd_calibrate, "label": cmd_label, "runs": cmd_runs, "i2v": cmd_i2v, "web": cmd_web}[args.cmd]
     try:
         return handler(cfg, args)
     except KeyboardInterrupt:

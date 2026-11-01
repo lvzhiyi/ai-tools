@@ -8,6 +8,8 @@ dependencies = [
     "soundfile",   # 读取音频时长、合并音频
     "opencv-python-headless",  # 人脸检测/比对（YuNet + SFace）、图片缩放
     "numpy",
+    "starlette",   # 网页控制台（studio web）
+    "uvicorn",
 ]
 
 [project.scripts]

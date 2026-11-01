@@ -55,6 +55,16 @@ def load_labels(out: Path, raw: bool = False) -> dict:
     return valid
 
 
+def save_label(out: Path, pair: dict, value: str, lock: threading.Lock | None = None) -> None:
+    """记一条标注（带内容指纹）。网页控制台和 studio label 共用。"""
+    if value not in ("same", "diff", "skip"):
+        raise ValueError(f"标注只能是 same / diff / skip：{value}")
+    with lock or threading.Lock():
+        stored = load_labels(out, raw=True)
+        stored[pair["key"]] = {"value": value, "fp": pair["fp"]}
+        (out / "labels.json").write_text(json.dumps(stored, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 PAGE = """<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>人脸标注</title>
 <style>
  body{margin:0;background:#141418;color:#eee;font-family:-apple-system,"PingFang SC",sans-serif}
@@ -148,10 +158,8 @@ def serve(sb: dict, out: Path, port: int = 8765, open_browser: bool = True) -> N
                 return self._send(400, b"bad value", "text/plain")
             if data.get("key") not in by_key:
                 return self._send(400, b"unknown pair", "text/plain")
-            with lock:
-                labels[data["key"]] = data["value"]
-                stored[data["key"]] = {"value": data["value"], "fp": by_key[data["key"]]["fp"]}
-                labels_path.write_text(json.dumps(stored, ensure_ascii=False, indent=2), encoding="utf-8")
+            save_label(out, by_key[data["key"]], data["value"], lock)
+            labels[data["key"]] = data["value"]
             self._send(200, b"{}", "application/json")
 
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)

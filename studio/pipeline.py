@@ -173,8 +173,9 @@ def _i2v(sb: dict, out: Path, cfg: dict, timeline: list[dict], force: bool, m, s
         name = sbmod.shot_name(s)
         img, clip = out / "images" / f"{name}.png", clips / f"{name}.mp4"
         frames = i2v.frames_for(dur.get(name, 2.0), fps, max_frames)
-        r = engine.generate(img, i2v.build_prompt(s, sb["characters"]), frames, clip, seed=int(s.get("seed") or 42))
-        ev = {"shot": name, "sec": r["sec"], "frames": frames, "video_sec": round(frames / fps, 2),
+        seed = int(icfg.get("seed") or s.get("seed") or 42)  # --seed 覆盖 > 镜头自己的 seed > 42
+        r = engine.generate(img, i2v.build_prompt(s, sb["characters"]), frames, clip, seed=seed)
+        ev = {"shot": name, "sec": r["sec"], "frames": frames, "video_sec": round(frames / fps, 2), "seed": seed,
               "peak_gb": r["peak_gb"], "motion": bool(s.get("motion"))}
         msg = ""
         if faces:
@@ -194,7 +195,17 @@ def _i2v(sb: dict, out: Path, cfg: dict, timeline: list[dict], force: bool, m, s
                     msg = (f"，人脸 {fc['identity_min']:.2f}~{fc['identity_median']:.2f}"
                            f"（比了 {fc['frames']} 帧，跳过 {fc['skipped']} 帧侧脸/背影）" + (" 👀" if ev["review"] else ""))
         m.event("i2v", **ev)
+        _save_i2v_result(clips, name, ev, i2v.build_prompt(s, sb["characters"]))
         _log(f"  [{i}/{len(todo)}] 镜头 {name}：{frames} 帧，用时 {r['sec']:.0f}s{msg}")
+
+
+def _save_i2v_result(clips: Path, name: str, ev: dict, prompt: str) -> None:
+    """每段的耗时、人脸质检结果存到 clips/i2v.json（网页控制台的镜头墙要读）。"""
+    p = clips / "i2v.json"
+    data = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    data[name] = {**{k: v for k, v in ev.items() if k != "shot"}, "prompt": prompt,
+                  "time": time.strftime("%Y-%m-%d %H:%M:%S")}
+    p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _subtitle(timeline: list[dict], out: Path, cfg: dict) -> None:

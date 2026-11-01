@@ -4,3 +4,6 @@ __pycache__/
 *.pyc
 .DS_Store
 models/
+
+# 临时文件（打包、传输用）
+tmp/

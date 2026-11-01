@@ -163,6 +163,8 @@ ai-tools/
 │   ├── tts.py           ← 配音（Qwen3-TTS / mlx-audio）
 │   ├── subtitle.py      ← 由台词 + 音频时长生成 SRT
 │   ├── i2v.py           ← 图生视频：LTX-2.3（子进程调用）+ 抽帧人脸质检
+│   ├── checks.py        ← 环境检查（studio check 和网页共用）
+│   ├── web/             ← 网页控制台后端：app.py（接口）、jobs.py（任务队列 + SSE）、projects.py（项目数据）、static/（构建好的前端）
 │   ├── video.py         ← ffmpeg 拼预览视频
 │   ├── plan.py          ← LM Studio：剧本 → 分镜表
 │   ├── storyboard.py    ← 分镜表格式（角色 + 镜头）
@@ -174,6 +176,7 @@ ai-tools/
 │   ├── face.py          ← 人脸一致性（OpenCV YuNet + SFace）
 │   ├── vision.py        ← 看图质检（LM Studio 多模态模型）
 │   └── llm.py           ← OpenAI 兼容客户端（plan / vision 共用）
+├── web/                 ← 网页控制台前端源码（React + TypeScript，npm run build → studio/web/static/）
 ├── workflows/           ← ComfyUI 工作流（API 格式）
 ├── screenplays/         ← 剧本（纯文本）
 ├── storyboards/         ← 分镜表（JSON）
@@ -194,6 +197,35 @@ cd ~/ai-tools
 uv sync                 # 安装依赖（第一次要几分钟）
 uv run studio check     # 检查环境
 ```
+
+## 网页控制台
+
+```bash
+uv sync                  # 第一次：装上 starlette / uvicorn
+uv run studio web        # 打开 http://127.0.0.1:8780
+```
+
+不用记命令，在浏览器里走完整个流程：
+
+| 页面 | 能做什么 |
+|---|---|
+| 总览 | 环境检查（ComfyUI / LM Studio / 图生视频引擎 / 人脸模型 / 配音），最近的任务和运行耗时 |
+| 剧本 | 粘贴故事 → 用本地模型拆成分镜表 |
+| 项目 · 镜头墙 | 每个镜头的图、候选图、动态片段、配音、人脸分数和画面分，👀 标出要人工看的；单个镜头重画图 / 重新配音 / 换种子重做视频 |
+| 项目 · 生成 | 一键跑全流程或单独跑某一步，日志实时滚动，可以取消 |
+| 项目 · 编辑分镜 | 表单编辑角色和镜头（画面、动作、台词、音色），保存时按命令行同一套规则校验；也能直接改 JSON |
+| 项目 · 定妆照 / 预览视频 / 报告 | 三角度定妆照；带字幕的预览视频和时间线；每次运行的报告和耗时图、质检报告 |
+| 项目 · 人工标注 | 盲标"像不像同一个人"（键盘 1/2/3），给阈值校准用 |
+| 任务 / 运行历史 / 阈值校准 / 试一张图 | 任务队列和日志；所有运行的阶段耗时对比；校准结果表；单独试提示词 |
+
+**实现**
+
+- 后端（`studio/web/`，Starlette）：网页上的每个操作都翻译成一条 `studio` 命令（白名单拼参数），放进**单 worker 任务队列**在子进程里执行 ——
+  和命令行走同一条代码路径；24GB 内存一次只能跑一个大模型，所以串行排队；子进程结束，模型内存全部释放
+- 日志用 **SSE** 推给页面（断线带 `?from=N` 续传）；取消是给整个进程组发 SIGINT，和按 Ctrl+C 一样收尾，已生成的文件和运行报告都保留
+- 重做某个镜头时旧文件挪进 `_history/<时间>/`，不删除；视频片段重做会换随机种子（同一张图 + 同一段描述，只有换种子才出不同的动作）
+- 前端（`web/`，React + TypeScript，esbuild 打包）：构建产物提交在 `studio/web/static/`，**用控制台不需要装 Node**；
+  改前端时 `cd web && npm install && npm run dev`（监听构建，刷新浏览器即可）
 
 ## 日常用法
 
