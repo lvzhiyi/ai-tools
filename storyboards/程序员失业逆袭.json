@@ -1,0 +1,202 @@
+{
+  "title": "最后一次提交",
+  "characters": {
+    "chenmo": {
+      "name": "陈默",
+      "look": "32岁，后端程序员。深灰色皱衬衫，短发黑发。沉默寡言，眼神中带着疲惫但坚韧。"
+    },
+    "wangzong": {
+      "name": "王总",
+      "look": "40岁，管理者。合身西装，一丝不苟的笑容，气场强大。"
+    },
+    "linxia": {
+      "name": "林晓",
+      "look": "30岁，会计。居家服饰，温柔而现实的妻子形象。"
+    },
+    "laozhou": {
+      "name": "老周",
+      "look": "55岁，早餐店老板。围裙上沾着面粉，敦厚实在的形象。"
+    }
+  },
+  "shots": [
+    {
+      "id": 1,
+      "image": "Cinematic vertical film still of a modern conference room. A polished table with an agreement document and pens. {wangzong} sits opposite {chenmo}, maintaining a professional, slightly condescending smile. The lighting is cold and bright, emphasizing the tension. Close-up shot on their hands.",
+      "characters": [
+        "chenmo",
+        "wangzong"
+      ],
+      "line": "陈默，公司感谢你这八年的付出。",
+      "voice": "Eric",
+      "emotion": "客气，带着功利性的体面。",
+      "motion": "{wangzong} gestures slightly towards the document, maintaining perfect posture."
+    },
+    {
+      "id": 2,
+      "image": "Cinematic vertical film still of {chenmo}'s face in the cold conference room. His expression is strained, staring at the agreement paper. The lighting casts sharp shadows, highlighting his internal conflict and exhaustion.",
+      "characters": [
+        "chenmo",
+        "wangzong"
+      ],
+      "line": "所以……是我不够努力？",
+      "voice": "Dylan",
+      "emotion": "压抑，试图抓住最后一丝体面。",
+      "motion": "{chenmo} slowly looks up from the document, his jaw tight."
+    },
+    {
+      "id": 3,
+      "image": "Cinematic vertical film still of {wangzong}'s face. He maintains a fixed, polite smile while delivering the verdict in the cold conference room setting. The camera pushes slightly into his eyes, making his smile seem artificial.",
+      "characters": [
+        "wangzong"
+      ],
+      "line": "是你不便宜。",
+      "voice": "Eric",
+      "emotion": "坚决，笑容不变，刀口很软。",
+      "motion": "{wangzong} holds his smile steady, a slight pause before speaking."
+    },
+    {
+      "id": 4,
+      "image": "Cinematic vertical film still of a close-up on the agreement document. The phrase '协商解除' is clearly visible, contrasted by {chenmo}'s trembling hand underneath the table. The lighting is harsh and unforgiving.",
+      "characters": [
+        "chenmo"
+      ],
+      "line": "",
+      "voice": "",
+      "emotion": "",
+      "motion": "Camera focuses tightly on the paper, then slowly pulls back to reveal {chenmo}'s knuckles pressed white under the table."
+    },
+    {
+      "id": 5,
+      "image": "Cinematic vertical film still of {chenmo}'s face in his dimly lit rental apartment. A laptop screen glows brightly, displaying '已投递 37 份'. The harsh contrast between the cold screen light and his tired face is dramatic.",
+      "characters": [
+        "chenmo"
+      ],
+      "line": "",
+      "voice": "Uncle_Fu",
+      "emotion": "旁白，低沉而现实。",
+      "motion": "The laptop screen illuminates his face, showing the passage of time and mounting pressure."
+    },
+    {
+      "id": 6,
+      "image": "Cinematic vertical film still of {linxia} entering the apartment. She stands in the doorway, her expression a mix of quiet concern and acceptance. The scene is dimly lit by a single table lamp, creating intimacy but also isolation.",
+      "characters": [
+        "chenmo",
+        "linxia"
+      ],
+      "line": "今天……有消息吗？",
+      "voice": "Vivian",
+      "emotion": "温柔，带着一丝不易察觉的疲惫。",
+      "motion": "{linxia} gently closes the door behind her, setting down her coat."
+    },
+    {
+      "id": 7,
+      "image": "Cinematic vertical film still of {chenmo} closing his laptop. The screen reflects the harsh reality of their situation in the small, cramped apartment. The shot is wide, emphasizing the distance between them.",
+      "characters": [
+        "chenmo",
+        "linxia"
+      ],
+      "line": "在谈几家。",
+      "voice": "Dylan",
+      "emotion": "平静，带着一种疲惫的敷衍。",
+      "motion": "{chenmo} slowly closes the laptop, the sound echoing in the quiet room."
+    },
+    {
+      "id": 8,
+      "image": "Cinematic vertical film still of {linxia}'s back as she stands facing the empty dining table. The warm glow from the lamp contrasts with her distant posture, symbolizing their silent struggle. Rain streaks down the windowpane.",
+      "characters": [
+        "linxia"
+      ],
+      "line": "陈默，你不用骗我。你只要别骗你自己。",
+      "voice": "Vivian",
+      "emotion": "释然，带着一种看透一切的无奈。",
+      "motion": "The camera slowly pushes in on her silhouette, emphasizing the quiet weight of her words."
+    },
+    {
+      "id": 9,
+      "image": "Cinematic vertical film still inside the bustling breakfast stall. Steam rises from the steamer baskets, creating a warm, busy atmosphere. {laozhou} is counting books on the worn wooden counter.",
+      "characters": [
+        "chenmo",
+        "laozhou"
+      ],
+      "line": "小陈啊，你说我这店，一天卖四百个包子，怎么月底一算还亏？",
+      "voice": "Uncle_Fu",
+      "emotion": "叹气，带着小本经营的困惑。",
+      "motion": "{laozhou} sighs heavily, pushing three account books toward {chenmo}."
+    },
+    {
+      "id": 10,
+      "image": "Cinematic vertical film still of {chenmo}'s hands turning over the account books. Extreme close-up on the handwritten, messy numbers and the debt notes ('隔壁老李 欠 12 元'). His fingers pause, then his expression changes to sudden clarity.",
+      "characters": [
+        "chenmo"
+      ],
+      "line": "五千……我一行代码就能省。",
+      "voice": "Dylan",
+      "emotion": "顿悟，眼神中第一次燃起了光芒。",
+      "motion": "{chenmo}'s eyes shift from confusion to sudden sharp focus as he reads the figures."
+    },
+    {
+      "id": 11,
+      "image": "Cinematic vertical film still in a modern office setting. {chenmo} is focused intently on his computer screen, surrounded by crumpled paper and empty ramen containers. The scene is lit only by the monitor glow, suggesting late night work.",
+      "characters": [
+        "chenmo"
+      ],
+      "line": "",
+      "voice": "",
+      "emotion": "",
+      "motion": "Rapid montage sequence: keyboard clicks become frantic, the screen flashes error messages, then stabilizes on a clean code editor."
+    },
+    {
+      "id": 12,
+      "image": "Cinematic vertical film still in the breakfast stall. {chenmo} holds his phone, which is propped up near the steamer basket. The warm morning light filters in. {laozhou} watches with skeptical hope.",
+      "characters": [
+        "chenmo",
+        "laozhou"
+      ],
+      "line": "老周，扫这个码，卖一个包子点一下，晚上自动出账。",
+      "voice": "Dylan",
+      "emotion": "自信而冷静，带着程序员的逻辑感。",
+      "motion": "{chenmo} calmly explains the simple solution, contrasting his quiet demeanor with the revolutionary idea."
+    },
+    {
+      "id": 13,
+      "image": "Cinematic vertical film still of a phone screen displaying transaction notifications. The numbers rapidly climb: 3 -> 41 -> 386. The sound effect of 'Ding' is crisp and triumphant against the background noise.",
+      "characters": [],
+      "line": "",
+      "voice": "",
+      "emotion": "",
+      "motion": "Quick cuts of the phone screen, showing exponential growth and success notifications."
+    },
+    {
+      "id": 14,
+      "image": "Cinematic vertical film still on a rooftop at sunset. {chenmo} stands against the vast, glittering cityscape below, his silhouette framed by the golden hour light. He looks out over the city, a rare, genuine smile touching his lips.",
+      "characters": [
+        "chenmo"
+      ],
+      "line": "可代码从来不看年龄，它只看——你还写不写得动。",
+      "voice": "Dylan",
+      "emotion": "释然，带着巨大的成就感和洒脱。",
+      "motion": "{chenmo} slowly turns his head from the view, facing the setting sun, a peaceful smile on his face."
+    },
+    {
+      "id": 15,
+      "image": "Cinematic vertical film still of a professional phone call. {wangzong} is on the other end, sounding overly enthusiastic and attempting to lure him back. {chenmo}'s expression is utterly composed, holding his ground.",
+      "characters": [
+        "chenmo",
+        "wangzong"
+      ],
+      "line": "我现在按分钟收费。",
+      "voice": "Dylan",
+      "emotion": "平静，带着不可撼动的底气和商业的傲慢。",
+      "motion": "{chenmo} holds his phone steady, delivering the line with absolute control."
+    },
+    {
+      "id": 16,
+      "image": "Cinematic vertical film still of the final shot: a clean black screen. A single, sharp 'Ding' notification sound rings out. The text overlays the image.",
+      "characters": [],
+      "line": "",
+      "voice": "",
+      "emotion": "",
+      "motion": "The sound rings out, followed by the text overlay: '第 200 天。用户数：100,000。'"
+    }
+  ]
+}

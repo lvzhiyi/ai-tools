@@ -72,9 +72,9 @@ timeout_sec = 600
 # 服务需支持 OpenAI Chat Completions、temperature 和严格 json_schema；看图还需支持 image_url
 [lmstudio.cloud]
 enabled = false
-url = ""                  # 供应商的 OpenAI 兼容地址，通常以 /v1 结尾
-model = ""                # 云端文本模型 ID（用于拆分镜）
-vision_model = ""         # 云端看图模型 ID；留空表示不对图片启用兜底
+url = "https://ai.jidianwuxian.cn/v1"                  # 供应商的 OpenAI 兼容地址，通常以 /v1 结尾
+model = "gpt-6.1-sol"                # 云端文本模型 ID（用于拆分镜）
+vision_model = "gpt-6.1-sol"         # 云端看图模型 ID；留空表示不对图片启用兜底
 api_key_env = "STUDIO_CLOUD_API_KEY"  # 密钥放在此环境变量中，不写进配置或仓库
 timeout_sec = 120          # 云端请求超时（秒）
 
