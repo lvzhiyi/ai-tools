@@ -42,7 +42,17 @@ def run(cfg: dict) -> list[dict]:
             models = [m["id"] for m in json.load(r).get("data", [])]
         items.append(_item("LM Studio", "ok", f"已连接，可用模型：{', '.join(models) or '（无）'}"))
     except Exception:
-        items.append(_item("LM Studio", "warn", "没开（拆分镜和看图质检需要它）"))
+        items.append(_item("LM Studio", "warn", "不可用（优先使用本地；配置云端兜底后可继续拆分镜/看图）"))
+
+    from .llm import cloud_status
+    cloud_cfg = cfg["lmstudio"].get("cloud", {})
+    text_ready, text_detail = cloud_status(cfg["lmstudio"])
+    _, vision_detail = cloud_status(cfg["lmstudio"], vision=True)
+    status = "ok" if text_ready else "warn"
+    detail = f"文本：{text_detail}；看图：{vision_detail}"
+    if not cloud_cfg.get("enabled", False):
+        detail = "未启用（仅使用本地模型，无云端请求）"
+    items.append(_item("云端模型兜底", status, detail))
 
     items.append(_item("ffmpeg", "ok", "已安装") if has_ffmpeg() else _item("ffmpeg", "fail", "没有 ffmpeg：brew install ffmpeg"))
 

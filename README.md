@@ -198,6 +198,42 @@ uv sync                 # 安装依赖（第一次要几分钟）
 uv run studio check     # 检查环境
 ```
 
+## 模型路由：本地优先、云端兜底
+
+拆分镜（`studio plan`）和看图质检共用 `studio/llm.py`，网页操作也走这条路径。默认 `[lmstudio.cloud] enabled = false`，目前只有本地模型时无需改配置，也不会产生云端请求。
+
+每次先请求本地；连接失败、超时、HTTP 错误、空输出、接口结构异常、无效 JSON 或结果不符合 schema 时，才尝试一次云端。两端都失败会报告各端失败原因；取消任务不会触发兜底。云端文本和图片分别选择 `model`、`vision_model`，不会沿用本地模型名。人脸比对、出图、配音和图生视频仍按原有流程执行。
+
+需要云端时，编辑 `config.toml` 已有的配置段（替换示例地址、模型 ID）：
+
+```toml
+[lmstudio.cloud]
+enabled = true
+url = "https://your-provider.example/v1"
+model = "your-text-model-id"
+vision_model = "your-vision-model-id"  # 不用云端看图则留空
+api_key_env = "STUDIO_CLOUD_API_KEY"
+timeout_sec = 120
+```
+
+密钥通过环境变量传入，随后在同一终端启动 CLI 或网页服务：
+
+```bash
+export STUDIO_CLOUD_API_KEY="你的密钥"
+uv run studio check
+uv run studio web
+```
+
+云端服务和模型需支持 OpenAI 兼容的 `/chat/completions`、`temperature` 和 `response_format=json_schema` 严格输出；云端看图模型还需支持 `image_url`（base64 图片）。不支持这些参数的服务不能直接用此配置。严格 schema 依据 [OpenAI 官方结构化输出文档](https://developers.openai.com/api/docs/guides/structured-outputs)。
+
+- 启用兜底表示本地失败时会把同一份剧本或质检图片发送给所配置的云端，可能计费。
+- `studio check` 展示云端是否启用、模型/密钥是否配置完整，不向云端发请求，也不代表真实云端已联通。
+- 本地默认超时 600 秒，看图调用上限 300 秒；可在 `[lmstudio] timeout_sec` 调小以更快兜底。云端默认上限 120 秒，调用方更短的上限仍生效。
+- 云端未启用或配置不完整时，本地成功仍正常返回；本地也不可用时，拆分镜报错，看图质检保留原有降级跳过行为。
+- 日志会提示切换云端及失败类别，不打印密钥、剧本、图片或接口响应正文。
+
+运行离线回归测试：`uv run python -m unittest discover -v`。当前通过模拟 HTTP 边界验证路由；尚未用真实云端账号联调。
+
 ## 网页控制台
 
 ```bash

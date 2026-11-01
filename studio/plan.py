@@ -1,4 +1,4 @@
-"""用 LM Studio 里的本地大模型，把剧本拆成分镜表（JSON）。
+"""把剧本拆成分镜表（JSON）：LM Studio 本地优先，可选云端兜底。
 
 LM Studio 的接口和 OpenAI 一样：POST {url}/chat/completions
 用 response_format=json_schema 让模型严格按格式输出。
@@ -26,12 +26,14 @@ SYSTEM_PROMPT = """你是短剧分镜师。把用户给的剧本拆成竖屏短�
 
 SCHEMA = {
     "type": "object",
+    "additionalProperties": False,
     "properties": {
         "title": {"type": "string"},
         "characters": {
             "type": "array",
             "items": {
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     "id": {"type": "string"},
                     "name": {"type": "string"},
@@ -44,6 +46,7 @@ SCHEMA = {
             "type": "array",
             "items": {
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     "id": {"type": "integer"},
                     "image": {"type": "string"},

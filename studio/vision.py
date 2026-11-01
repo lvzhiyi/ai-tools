@@ -1,4 +1,4 @@
-"""画面质检：让能看图的本地模型（LM Studio 里的 gemma-4 等）对照分镜描述打分、挑毛病。"""
+"""画面质检：看图模型对照分镜描述打分、挑毛病，本地优先，可选云端兜底。"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -21,6 +21,7 @@ extreme_expression: true if the main character's face shows an extreme expressio
 
 SCHEMA = {
     "type": "object",
+    "additionalProperties": False,
     "properties": {
         "match_score": {"type": "integer", "minimum": 1, "maximum": 5},
         "defects": {"type": "array", "items": {"type": "string"}},

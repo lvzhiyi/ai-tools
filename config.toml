@@ -65,6 +65,19 @@ url = "http://127.0.0.1:1234/v1"
 # 在 LM Studio 的 Developer 页面看模型名；中文剧本建议换成 Qwen 14B 级别
 model = "google/gemma-4-e4b"
 ttl_sec = 300              # 模型空闲多少秒后 LM Studio 自动卸载
+# 本地推理最长等待时间；小模型拆长剧本较慢，可自行调小以更快进入兜底
+timeout_sec = 600
+
+# 可选云端兜底：目前仅本地运行，默认关闭；启用后，本地失败才发送剧本/图片到云端
+# 服务需支持 OpenAI Chat Completions、temperature 和严格 json_schema；看图还需支持 image_url
+[lmstudio.cloud]
+enabled = false
+url = ""                  # 供应商的 OpenAI 兼容地址，通常以 /v1 结尾
+model = ""                # 云端文本模型 ID（用于拆分镜）
+vision_model = ""         # 云端看图模型 ID；留空表示不对图片启用兜底
+api_key_env = "STUDIO_CLOUD_API_KEY"  # 密钥放在此环境变量中，不写进配置或仓库
+timeout_sec = 120          # 云端请求超时（秒）
+
 
 # 图生视频：每个镜头的图 → 几秒动态镜头（"动态分镜"，看动作和节奏；定稿镜头再交给可灵 / 即梦）
 # 引擎 ltx-2-mlx 装在独立目录、独立 uv 环境，这里用子进程调用

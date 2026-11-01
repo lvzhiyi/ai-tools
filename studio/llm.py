@@ -1,68 +1,136 @@
 """OpenAI 兼容的大模型客户端（默认指向本地 LM Studio）。
 
 plan（拆分镜）和 vision（看图质检）共用这一个入口。
-以后要做"本地优先、云端兜底"，只需要在这里加一层路由。
+本地优先；仅在显式配置 cloud 时启用云端兜底。
 """
 from __future__ import annotations
 
 import base64
 import json
+import http.client
+import logging
+import os
 import re
 import shutil
 import subprocess
 import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
+
+from jsonschema.validators import validator_for
 
 
 class LLMError(RuntimeError):
     pass
 
 
-def chat(cfg: dict, messages: list[dict], schema: dict | None = None, *,
-         model: str | None = None, temperature: float = 0.2, timeout: float = 600) -> dict | str:
-    body: dict = {
-        "model": model or cfg["model"],
-        "temperature": temperature,
-        "messages": messages,
-        "ttl": int(cfg.get("ttl_sec", 300)),  # LM Studio：空闲多久后自动卸载模型
-    }
-    if schema:
+def cloud_status(cfg: dict, *, vision: bool = False) -> tuple[bool, str]:
+    """只检查云端配置，不发送请求；看图必须显式指定支持图片的模型。"""
+    cloud = cfg.get("cloud", {})
+    if not cloud.get("enabled", False):
+        return False, "未启用（仅使用本地模型）"
+    try:
+        url = urlsplit(cloud.get("url", ""))
+    except ValueError:
+        return False, "云端 url 格式无效"
+    if url.scheme not in {"http", "https"} or not url.netloc or url.username or url.password:
+        return False, "请配置有效的云端 url（凭证使用环境变量）"
+    field = "vision_model" if vision else "model"
+    if not cloud.get(field, "").strip():
+        return False, f"未配置云端 {field}"
+    key_env = cloud.get("api_key_env", "STUDIO_CLOUD_API_KEY")
+    if not os.environ.get(key_env, "").strip():
+        return False, f"未设置云端密钥环境变量 {key_env}"
+    return True, "已配置（未发起云端请求）"
+
+
+def _request(cfg: dict, messages: list[dict], schema: dict | None, *,
+             model: str, temperature: float, timeout: float, cloud: bool,
+             validator) -> dict | str:
+    label = "云端" if cloud else "本地 LM Studio"
+    body: dict = {"model": model, "temperature": temperature, "messages": messages}
+    headers = {"Content-Type": "application/json"}
+    if cloud:
+        key = os.environ[cfg.get("api_key_env", "STUDIO_CLOUD_API_KEY")].strip()
+        headers["Authorization"] = f"Bearer {key}"
+    else:
+        body["ttl"] = int(cfg.get("ttl_sec", 300))
+    if schema is not None:
         body["response_format"] = {
             "type": "json_schema",
             "json_schema": {"name": "result", "strict": True, "schema": schema},
         }
     req = urllib.request.Request(
         cfg["url"].rstrip("/") + "/chat/completions",
-        data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json"},
+        data=json.dumps(body).encode(), headers=headers,
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=min(timeout, float(cfg.get("timeout_sec", timeout)))) as resp:
             data = json.load(resp)
     except urllib.error.HTTPError as e:
-        raise LLMError(f"LM Studio 返回 {e.code}：{e.read().decode('utf-8', 'replace')[:500]}") from e
-    except urllib.error.URLError as e:
-        raise LLMError(
-            f"连不上 LM Studio（{cfg['url']}）。请打开 LM Studio → Developer → 打开 Server。{e.reason}"
-        ) from e
+        e.close()
+        raise LLMError(f"{label} HTTP {e.code}") from None
+    except (TimeoutError, urllib.error.URLError, OSError, http.client.HTTPException):
+        raise LLMError(f"{label} 连接失败或请求超时") from None
+    except (ValueError, UnicodeError):
+        raise LLMError(f"{label} 返回无效的接口 JSON") from None
 
-    content = data["choices"][0]["message"]["content"] or ""
-    if not schema:
+    try:
+        message = data["choices"][0]["message"]
+        content = message["content"]
+        if message.get("refusal") or not isinstance(content, str) or not content.strip():
+            raise ValueError
+        if data["choices"][0].get("finish_reason") in {"length", "content_filter"}:
+            raise ValueError
+    except (KeyError, IndexError, TypeError, ValueError):
+        raise LLMError(f"{label} 返回空内容、拒绝、截断或无效响应结构") from None
+    if schema is None:
         return content
     content = re.sub(r"^```(?:json)?|```$", "", content.strip(), flags=re.M).strip()
     try:
-        return json.loads(content)
-    except json.JSONDecodeError as e:
-        raise LLMError(f"模型没有返回合法 JSON：{content[:300]}") from e
+        result = json.loads(content)
+    except ValueError:
+        raise LLMError(f"{label} 模型没有返回合法 JSON") from None
+    if not validator.is_valid(result):
+        raise LLMError(f"{label} 模型 JSON 不符合 schema")
+    return result
 
 
-def available(cfg: dict) -> bool:
+def chat(cfg: dict, messages: list[dict], schema: dict | None = None, *,
+         model: str | None = None, temperature: float = 0.2, timeout: float = 600) -> dict | str:
+    """先本地，失败时最多尝试一次显式启用且配置完整的云端。"""
+    validator = None
+    if schema is not None:
+        cls = validator_for(schema)
+        cls.check_schema(schema)  # 编程错误不触发云端调用
+        validator = cls(schema)
+    try:
+        return _request(cfg, messages, schema, model=model or cfg["model"],
+                        temperature=temperature, timeout=timeout, cloud=False, validator=validator)
+    except LLMError as local_error:
+        vision = any(isinstance(m.get("content"), list) and any(
+            isinstance(p, dict) and p.get("type") == "image_url" for p in m["content"]
+        ) for m in messages)
+        ready, reason = cloud_status(cfg, vision=vision)
+        if not ready:
+            raise LLMError(f"{local_error}；云端不可用：{reason}") from None
+        logging.getLogger(__name__).warning("%s；切换云端兜底%s", local_error, "（含图片）" if vision else "")
+        cloud = cfg["cloud"]
+        cloud_model = cloud["vision_model" if vision else "model"]
+        try:
+            return _request(cloud, messages, schema, model=cloud_model,
+                            temperature=temperature, timeout=timeout, cloud=True, validator=validator)
+        except LLMError as cloud_error:
+            raise LLMError(f"本地和云端均失败：{local_error}；{cloud_error}") from None
+
+
+def available(cfg: dict, *, vision: bool = False) -> bool:
     try:
         with urllib.request.urlopen(cfg["url"].rstrip("/") + "/models", timeout=3):
             return True
-    except Exception:
-        return False
+    except (OSError, ValueError, http.client.HTTPException):
+        return cloud_status(cfg, vision=vision)[0]
 
 
 def image_part(path: Path, max_side: int = 768) -> dict:

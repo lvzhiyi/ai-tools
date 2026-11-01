@@ -2,7 +2,7 @@
 
   studio check                         检查环境（ComfyUI / LM Studio / ffmpeg / 配音模型）
   studio image "画面描述"               只出一张图，快速试提示词
-  studio plan 剧本.txt                  用 LM Studio 把剧本拆成分镜表 → storyboards/
+  studio plan 剧本.txt                  本地优先拆分镜，可选云端兜底 → storyboards/
   studio run storyboards/xxx.json      跑完整流水线 → output/（出图带 AI 质检）
   studio i2v storyboards/xxx.json      图生视频：每个镜头的图 → 几秒动态镜头（LTX-2.3，本地 MLX）
   studio cast storyboards/xxx.json     只生成角色定妆照（质检用的"标准脸"）
@@ -47,7 +47,7 @@ def cmd_plan(cfg: dict, args) -> int:
     from .plan import plan
 
     script = Path(args.script).read_text(encoding="utf-8")
-    print("正在用 LM Studio 拆分镜（小模型可能要一两分钟）...")
+    print("正在拆分镜（本地优先，已配置时云端兜底；小模型可能要一两分钟）...")
     sb = plan(script, cfg["lmstudio"], max_shots=args.max_shots)
     out = ROOT / "storyboards" / f"{Path(args.script).stem}.json"
     out.write_text(json.dumps(sb, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -198,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("prompt")
     s.add_argument("--seed", type=int)
 
-    s = sub.add_parser("plan", help="剧本 → 分镜表（需要 LM Studio）")
+    s = sub.add_parser("plan", help="剧本 → 分镜表（本地优先，可选云端兜底）")
     s.add_argument("script", help="剧本文本文件")
     s.add_argument("--max-shots", type=int, default=12)
 
