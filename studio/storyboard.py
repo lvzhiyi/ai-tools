@@ -9,10 +9,11 @@
   },
   "shots": [
     {"id": 2, "image": "Cinematic ... {linxia} looks back ...", "characters": ["linxia"],
-     "line": "台词", "voice": "Vivian", "emotion": "紧张", "seed": 123, "duration": 2.5}
+     "line": "台词", "voice": "Vivian", "emotion": "紧张", "seed": 123, "duration": 2.5,
+     "motion": "{linxia} slowly turns her head, camera pushes in"}
   ]
 }
-image 必填，其余选填。image 里的 {角色id} 会被替换成该角色的 look，保证每个镜头外貌描述一致；
+image 必填，其余选填。motion 是图生视频用的动作描述（英文，也可以用 {角色id}）。image 里的 {角色id} 会被替换成该角色的 look，保证每个镜头外貌描述一致；
 写了 {角色id} 的角色会自动加进 characters（用于人脸一致性质检）。
 """
 from __future__ import annotations

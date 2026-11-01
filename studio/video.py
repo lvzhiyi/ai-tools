@@ -22,7 +22,28 @@ def make_clip(image: Path, audio: Path | None, seconds: float, out: Path, cfg: d
         cmd += ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"]
     cmd += [
         "-t", f"{seconds:.3f}", "-vf", vf,
-        "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage",
+        "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage", "-video_track_timescale", "15360",
+        "-c:a", "aac", "-ar", "44100", "-ac", "2", str(out),
+    ]
+    _run(cmd)
+    return out
+
+
+def make_clip_from_video(src: Path, audio: Path | None, seconds: float, out: Path, cfg: dict) -> Path:
+    """图生视频片段 + 配音。片段比镜头短就定格最后一帧补齐，长就截掉；
+    画面按"铺满再裁切"缩放（片段是 448×768，和 9:16 略有差别，不留黑边）。
+    片段自带的音轨不要，换成我们的配音。编码参数和 make_clip 一致，才能无损拼接。"""
+    w, h, fps = cfg.get("width", 1080), cfg.get("height", 1920), cfg.get("fps", 30)
+    vf = (f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps={fps},"
+          f"tpad=stop_mode=clone:stop_duration={seconds:.3f},format=yuv420p")
+    cmd = ["ffmpeg", "-y", "-i", str(src)]
+    if audio:
+        cmd += ["-i", str(audio), "-af", "apad"]
+    else:
+        cmd += ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"]
+    cmd += [
+        "-map", "0:v:0", "-map", "1:a:0", "-t", f"{seconds:.3f}", "-vf", vf,
+        "-c:v", "libx264", "-preset", "veryfast", "-video_track_timescale", "15360",
         "-c:a", "aac", "-ar", "44100", "-ac", "2", str(out),
     ]
     _run(cmd)

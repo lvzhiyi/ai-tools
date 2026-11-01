@@ -24,11 +24,12 @@ from pathlib import Path
 
 from .config import ROOT
 
-STAGE_NAMES = {"images": "出图 + 质检", "audio": "配音", "subtitle": "字幕", "video": "预览视频"}
+STAGE_NAMES = {"images": "出图 + 质检", "audio": "配音", "i2v": "图生视频", "subtitle": "字幕", "video": "预览视频"}
 HISTORY = ROOT / "output" / "runs.csv"
 HISTORY_FIELDS = ["time", "project", "git", "status", "command", "t2i", "edit", "total_sec",
                   "images_sec", "audio_sec", "subtitle_sec", "video_sec", "images", "attempts",
-                  "first_pass", "avg_image_sec", "tts_lines", "avg_tts_sec"]
+                  "first_pass", "avg_image_sec", "tts_lines", "avg_tts_sec", "i2v_sec", "i2v_clips",
+                  "i2v_sec_per_video_sec"]
 
 
 def _git() -> str:
@@ -71,6 +72,7 @@ class Metrics:
             "qa": cfg.get("qa", {}).get("enabled", True),
             "face_threshold": cfg.get("qa", {}).get("face_threshold"),
             "tts_model": cfg.get("tts", {}).get("model"),
+            "i2v_model": cfg.get("i2v", {}).get("model"),
         }
         self.stages: list[dict] = []
         self.events: list[dict] = []
@@ -97,6 +99,8 @@ class Metrics:
         imgs = [e for e in self.events if e["kind"] == "image"]
         qa = [e for e in self.events if e["kind"] == "qa"]
         tts = [e for e in self.events if e["kind"] == "tts"]
+        vids = [e for e in self.events if e["kind"] == "i2v"]
+        vid_len = sum(e["video_sec"] for e in vids)
         shots = {e["shot"] for e in imgs}
         first = [e for e in qa if e.get("round") == 1]
         by_mode: dict[str, list[float]] = {}
@@ -118,6 +122,12 @@ class Metrics:
             # RTF（实时率）= 生成耗时 / 音频时长，< 1 表示比实时还快
             "tts_rtf": round(sum(e["sec"] for e in tts) / audio_total, 2) if audio_total else None,
             "review": sorted({e["shot"] for e in qa if e.get("review")}),
+            "i2v_clips": len(vids),
+            "avg_i2v_sec": round(sum(e["sec"] for e in vids) / len(vids), 1) if vids else None,
+            # 生成 1 秒视频要多少秒：衡量图生视频速度的统一口径（片段长短不同也能比）
+            "i2v_sec_per_video_sec": round(sum(e["sec"] for e in vids) / vid_len, 1) if vid_len else None,
+            "i2v_peak_gb": max((e["peak_gb"] for e in vids if e.get("peak_gb")), default=None),
+            "i2v_review": sorted(e["shot"] for e in vids if e.get("review")),
         }
 
     def finish(self, status: str = "ok", error: str | None = None) -> Path:
@@ -140,6 +150,7 @@ class Metrics:
 # ---------------------------------------------------------------- 历史
 def _append_history(meta: dict, s: dict, status: str) -> None:
     HISTORY.parent.mkdir(parents=True, exist_ok=True)
+    _migrate_history()
     new = not HISTORY.exists()
     st = s["stage_sec"]
     row = {
@@ -149,12 +160,29 @@ def _append_history(meta: dict, s: dict, status: str) -> None:
         "video_sec": st.get("video", ""), "images": s["images"], "attempts": s["attempts"],
         "first_pass": s["first_pass"], "avg_image_sec": s["avg_image_sec"] or "",
         "tts_lines": s["tts_lines"], "avg_tts_sec": s["avg_tts_sec"] or "",
+        "i2v_sec": st.get("i2v", ""), "i2v_clips": s["i2v_clips"] or "",
+        "i2v_sec_per_video_sec": s["i2v_sec_per_video_sec"] or "",
     }
     with open(HISTORY, "a", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=HISTORY_FIELDS)
         if new:
             w.writeheader()
         w.writerow(row)
+
+
+def _migrate_history() -> None:
+    """新增列时，把旧的 runs.csv 按新表头重写一遍（旧行的新列留空），避免列错位。"""
+    if not HISTORY.exists():
+        return
+    with open(HISTORY, encoding="utf-8") as f:
+        r = csv.DictReader(f)
+        if r.fieldnames == HISTORY_FIELDS:
+            return
+        rows = list(r)
+    with open(HISTORY, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=HISTORY_FIELDS, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
 
 
 def read_history(project: str | None = None) -> list[dict]:
@@ -214,12 +242,19 @@ def _report(data: dict, prev: dict | None) -> str:
         L += ["", "## 配音", "", f"- {s['tts_lines']} 句，平均每句 {s['avg_tts_sec']} 秒，"
               f"实时率 {s['tts_rtf']}（生成耗时 ÷ 音频时长，小于 1 就比实时快）"]
 
+    if s.get("i2v_clips"):
+        L += ["", "## 图生视频", "",
+              f"- {s['i2v_clips']} 段，平均每段 {s['avg_i2v_sec']} 秒；生成 1 秒视频要 {s['i2v_sec_per_video_sec']} 秒",
+              f"- 模型：{m.get('i2v_model')}　峰值显存：{s['i2v_peak_gb'] or '-'} GB"]
+        if s["i2v_review"]:
+            L.append(f"- 👀 动起来以后人脸可能跑偏：{'、'.join(s['i2v_review'])}")
+
     slow = sorted([e for e in data["events"] if "sec" in e], key=lambda e: -e["sec"])[:5]
     if slow:
         L += ["", "## 最慢的 5 步", "", "| 步骤 | 镜头 | 耗时 |", "|---|---|---|"]
         for e in slow:
             what = {"image": f"出图（{e.get('mode', '')}，第 {e.get('round', 1)} 轮）", "qa": "质检",
-                    "tts": f"配音（{e.get('voice', '')}）", "cast": "定妆照", "cast_angle": "侧脸定妆照"}.get(e["kind"], e["kind"])
+                    "tts": f"配音（{e.get('voice', '')}）", "cast": "定妆照", "cast_angle": "侧脸定妆照", "i2v": "图生视频"}.get(e["kind"], e["kind"])
             L.append(f"| {what} | {e.get('shot', e.get('character', '-'))} | {_fmt(e['sec'])} |")
 
     if not prev:
@@ -228,7 +263,7 @@ def _report(data: dict, prev: dict | None) -> str:
         L += ["", "## 和上一次对比（同一条命令）", "", f"上一次：{prev['time']}（git {prev['git']}，{prev['t2i']}）", "",
               "| 指标 | 上一次 | 这一次 | 变化 |", "|---|---|---|---|"]
         for key, label in [("total_sec", "总耗时"), ("images_sec", "出图 + 质检"), ("audio_sec", "配音"),
-                           ("avg_image_sec", "平均每张图")]:
+                           ("avg_image_sec", "平均每张图"), ("i2v_sec", "图生视频")]:
             now = s["total_sec"] if key == "total_sec" else (s["avg_image_sec"] if key == "avg_image_sec"
                                                              else s["stage_sec"].get(key.replace("_sec", "")))
             before = prev.get(key)

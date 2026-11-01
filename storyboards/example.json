@@ -13,12 +13,14 @@
     {
       "id": 1,
       "image": "Cinematic vertical film still of a rain-soaked city street at night, neon signs in blue and magenta reflected in puddles on wet asphalt, light rain falling, empty street, wide establishing shot, moody atmosphere, 35mm film look.",
+      "motion": "Rain keeps falling and ripples spread across the puddles, neon signs flicker, the camera slowly pans right",
       "line": "",
       "duration": 2.5
     },
     {
       "id": 2,
       "image": "Cinematic vertical film still of {linxia}, looking back over her shoulder toward the camera with a startled, frightened expression, rain-soaked neon city street at night, medium shot, shallow depth of field, 35mm film look.",
+      "motion": "{linxia} walks forward, then suddenly stops and looks back over her shoulder, her eyes widen in fear, slight handheld camera",
       "line": "有人在跟着我……从地铁站出来就一直在。",
       "voice": "Vivian",
       "emotion": "紧张，压低声音，带一点颤抖"
@@ -26,6 +28,7 @@
     {
       "id": 3,
       "image": "Cinematic vertical film still of a tall man in a dark hooded raincoat standing under a flickering streetlight at the far end of a wet neon-lit street at night, face hidden in shadow, rain falling, long shot, ominous mood, 35mm film look.",
+      "motion": "The hooded man stands still under the flickering streetlight as rain pours down, the camera slowly pushes in toward him",
       "line": "雨越下越大，那个人影，始终保持着二十米的距离。",
       "voice": "Uncle_Fu",
       "emotion": "低沉的旁白，营造悬疑感"
@@ -33,6 +36,7 @@
     {
       "id": 4,
       "image": "Cinematic vertical film still, close-up of {linxia}, holding a glowing smartphone to her ear, rain droplets on her cheeks, neon reflections in her eyes, determined expression, night street, 35mm film look.",
+      "motion": "{linxia} presses the phone to her ear and glances over her shoulder, rain keeps falling, neon lights flicker, slight handheld camera movement",
       "line": "喂，110吗？我在长顺街，有人一直跟踪我。",
       "voice": "Vivian",
       "emotion": "急促，强装镇定"

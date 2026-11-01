@@ -65,3 +65,21 @@ url = "http://127.0.0.1:1234/v1"
 # 在 LM Studio 的 Developer 页面看模型名；中文剧本建议换成 Qwen 14B 级别
 model = "google/gemma-4-e4b"
 ttl_sec = 300              # 模型空闲多少秒后 LM Studio 自动卸载
+
+# 图生视频：每个镜头的图 → 几秒动态镜头（"动态分镜"，看动作和节奏；定稿镜头再交给可灵 / 即梦）
+# 引擎 ltx-2-mlx 装在独立目录、独立 uv 环境，这里用子进程调用
+[i2v]
+enabled = false            # studio run 默认不跑（加 --i2v 开启），或者单独 studio i2v
+engine = "ltx_mlx"
+engine_dir = "~/ai-engines/ltx-2-mlx"
+model = "dgrauet/ltx-2.3-mlx-q4"
+extra_args = ["--distilled", "--low-ram"]   # 蒸馏版（步数少）+ 按块从磁盘加载（24GB 内存需要）
+compute_dtype = "float16"  # 实测比默认快约 10%，画面 SSIM 0.95、人脸相似度持平
+width = 576                # 宽高要是 32 的倍数；9:16 想更清楚可以试 576×1024（更慢、更吃内存）
+height = 1024
+fps = 24
+max_frames = 121           # 每段最长 5 秒（帧数是 8k+1）；镜头比片段长时，预览视频里定格最后一帧补齐
+timeout_sec = 1800
+face_check = true          # 抽帧和定妆照比人脸，低于 [qa] face_threshold 标 👀
+sample_every = 6           # 每几帧抽一帧
+max_yaw = 0.35             # 只统计正脸/半侧脸的帧，转头、背影的帧跳过

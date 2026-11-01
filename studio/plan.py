@@ -18,7 +18,10 @@ SYSTEM_PROMPT = """你是短剧分镜师。把用户给的剧本拆成竖屏短�
    程序会自动替换成 look，保证每个镜头外貌一致；并把这些角色 id 填进该镜头的 characters。
 4. voice 只能从这些音色里选：{voices}。同一个角色始终用同一个音色，旁白用 Uncle_Fu。
 5. emotion 用中文简短描述语气，比如"紧张，压低声音"。
-6. 镜头数量控制在 {max_shots} 个以内。
+6. motion 用英文写这个镜头里"动起来"的部分（给图生视频用）：人物动作、表情变化、镜头运动，一句话，
+   只写画面里能看到的变化，例如 "{{linxia}} slowly turns her head and glances back, camera pushes in slightly"。
+   空镜也要写环境的动态，例如 "rain keeps falling, neon signs flicker, slow pan right"。
+7. 镜头数量控制在 {max_shots} 个以内。
 """
 
 SCHEMA = {
@@ -48,8 +51,9 @@ SCHEMA = {
                     "line": {"type": "string"},
                     "voice": {"type": "string"},
                     "emotion": {"type": "string"},
+                    "motion": {"type": "string"},
                 },
-                "required": ["id", "image", "characters", "line", "voice", "emotion"],
+                "required": ["id", "image", "characters", "line", "voice", "emotion", "motion"],
             },
         },
     },

@@ -4,6 +4,7 @@
   studio image "画面描述"               只出一张图，快速试提示词
   studio plan 剧本.txt                  用 LM Studio 把剧本拆成分镜表 → storyboards/
   studio run storyboards/xxx.json      跑完整流水线 → output/（出图带 AI 质检）
+  studio i2v storyboards/xxx.json      图生视频：每个镜头的图 → 几秒动态镜头（LTX-2.3，本地 MLX）
   studio cast storyboards/xxx.json     只生成角色定妆照（质检用的"标准脸"）
   studio runs                          查看运行历史：每次的耗时、通过率，和上一次对比
   studio qa storyboards/xxx.json       只质检已有的图，不重画，出报告
@@ -59,6 +60,14 @@ def cmd_check(cfg: dict, _args) -> int:
         print("⚪ LM Studio 没开（只有 studio plan 需要它）")
 
     print("✅ ffmpeg 已安装" if has_ffmpeg() else "❌ 没有 ffmpeg：brew install ffmpeg")
+    from .i2v import make_engine
+    icfg = cfg.get("i2v", {})
+    probs = make_engine(icfg).check()
+    if probs:
+        print("⚪ 图生视频不可用（只有 --i2v / studio i2v 需要）：" + "；".join(probs))
+    else:
+        print(f"✅ 图生视频引擎：{icfg.get('engine_dir')}（{icfg.get('model')}）"
+              + ("" if icfg.get("enabled") else "，run 默认不跑，加 --i2v 开启"))
     try:
         from .face import FaceMatcher
         FaceMatcher()
@@ -203,9 +212,21 @@ def cmd_runs(cfg: dict, args) -> int:
 def cmd_run(cfg: dict, args) -> int:
     from .pipeline import run
 
-    import sys
+    if args.i2v:
+        cfg.setdefault("i2v", {})["enabled"] = True
     run(Path(args.storyboard), cfg, only=args.only, force=args.force,
         command="studio " + " ".join(sys.argv[1:]))
+    return 0
+
+
+def cmd_i2v(cfg: dict, args) -> int:
+    """只跑图生视频（图和配音要先有），然后重新拼预览视频。"""
+    from .pipeline import run
+
+    shots = {x.strip() for x in args.shots.split(",")} if args.shots else None
+    command = "studio " + " ".join(sys.argv[1:])
+    run(Path(args.storyboard), cfg, only="i2v", force=args.force, command=command, shots=shots)
+    run(Path(args.storyboard), cfg, only="video", command=command + " (video)")
     return 0
 
 
@@ -225,10 +246,16 @@ def main(argv: list[str] | None = None) -> int:
 
     s = sub.add_parser("run", help="分镜表 → 图片/配音/字幕/预览视频")
     s.add_argument("storyboard")
-    s.add_argument("--only", choices=["images", "audio", "subtitle", "video"], help="只跑某一步")
+    s.add_argument("--only", choices=["images", "audio", "i2v", "subtitle", "video"], help="只跑某一步")
+    s.add_argument("--i2v", action="store_true", help="加上图生视频（默认关，较慢）")
     s.add_argument("--force", action="store_true", help="已有文件也重新生成")
     s.add_argument("--no-qa", action="store_true", help="关闭 AI 质检（只画一次）")
     s.add_argument("--no-edit", action="store_true", help="不用参考图编辑，全部文生图（做对比实验用）")
+
+    s = sub.add_parser("i2v", help="图生视频：镜头图 → 动态镜头，并重拼预览视频")
+    s.add_argument("storyboard")
+    s.add_argument("--shots", help="只做某几个镜头，如 2,4 或 02,04")
+    s.add_argument("--force", action="store_true", help="已有片段也重新生成")
 
     s = sub.add_parser("runs", help="查看运行历史（耗时、通过率）")
     s.add_argument("--project", help="只看某个项目（分镜表里的 title）")
@@ -257,7 +284,7 @@ def main(argv: list[str] | None = None) -> int:
     if getattr(args, "no_edit", False) and isinstance(cfg["comfy"].get("edit"), dict):
         cfg["comfy"]["edit"]["enabled"] = False
     handler = {"check": cmd_check, "image": cmd_image, "plan": cmd_plan, "run": cmd_run,
-               "cast": cmd_cast, "qa": cmd_qa, "calibrate": cmd_calibrate, "label": cmd_label, "runs": cmd_runs}[args.cmd]
+               "cast": cmd_cast, "qa": cmd_qa, "calibrate": cmd_calibrate, "label": cmd_label, "runs": cmd_runs, "i2v": cmd_i2v}[args.cmd]
     try:
         return handler(cfg, args)
     except KeyboardInterrupt:
