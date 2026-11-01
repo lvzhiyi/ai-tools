@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ai-tools 模型知识图谱</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* 布局思路：一张横向流水线主图（阶段 → 模型 → 运行引擎），下面是对照表和模型档案，按"先全局、再细节"往下读 */
+  --bg: #f4f6f9;
+  --panel: #ffffff;
+  --ink: #18202e;
+  --muted: #5d6779;
+  --line: #d7dde7;
+  --accent: #3352c9;
+  --lm: #7c4ddb;      /* LM Studio */
+  --comfy: #2470c4;   /* ComfyUI */
+  --cv: #23895c;      /* OpenCV */
+  --mlx: #c86f19;     /* MLX */
+  --plain: #6f7888;   /* 非神经网络 */
+  --lm-bg: #f1ecfd; --comfy-bg: #e9f1fb; --cv-bg: #e7f5ee; --mlx-bg: #fbf0e4; --plain-bg: #eef0f3;
+  --ok: #23895c; --bad: #c43d3d; --warn: #b7791f;
+  --display: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --body: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151c; --panel: #181e28; --ink: #e6eaf2; --muted: #98a2b5; --line: #2c3544; --accent: #8aa2ff;
+    --lm: #b394ff; --comfy: #6eaef2; --cv: #5fcf9a; --mlx: #f0a35c; --plain: #a3acbb;
+    --lm-bg: #261f3a; --comfy-bg: #172a40; --cv-bg: #163126; --mlx-bg: #35261a; --plain-bg: #232a35;
+    --ok: #5fcf9a; --bad: #f07878; --warn: #e8b45a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151c; --panel: #181e28; --ink: #e6eaf2; --muted: #98a2b5; --line: #2c3544; --accent: #8aa2ff;
+  --lm: #b394ff; --comfy: #6eaef2; --cv: #5fcf9a; --mlx: #f0a35c; --plain: #a3acbb;
+  --lm-bg: #261f3a; --comfy-bg: #172a40; --cv-bg: #163126; --mlx-bg: #35261a; --plain-bg: #232a35;
+  --ok: #5fcf9a; --bad: #f07878; --warn: #e8b45a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.65; }
+main { max-width: 1240px; margin: 0 auto; padding: 32px 20px 64px; display: grid; gap: 40px; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+h1 { font-size: 30px; font-weight: 700; letter-spacing: 0.01em; }
+h2 { font-size: 21px; font-weight: 700; display: flex; align-items: baseline; gap: 10px; }
+h2 small { font-size: 13px; font-weight: 400; color: var(--muted); }
+h3 { font-size: 16px; font-weight: 700; }
+p { margin: 0; }
+.lede { color: var(--muted); max-width: 70ch; margin-top: 8px; }
+header { display: grid; gap: 14px; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 2px solid; }
+.d-lm { border-color: var(--lm); background: var(--lm-bg); }
+.d-comfy { border-color: var(--comfy); background: var(--comfy-bg); }
+.d-cv { border-color: var(--cv); background: var(--cv-bg); }
+.d-mlx { border-color: var(--mlx); background: var(--mlx-bg); }
+.d-plain { border-color: var(--plain); background: var(--plain-bg); }
+
+section { display: grid; gap: 14px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+figure { margin: 0; }
+figcaption { color: var(--muted); font-size: 13px; margin-top: 10px; }
+.scroll { overflow-x: auto; }
+
+/* SVG 主图 */
+svg.map { display: block; width: 100%; min-width: 1080px; height: auto; font-family: var(--body); }
+.stage rect { fill: var(--ink); }
+.stage text { fill: var(--bg); font-size: 14px; font-weight: 700; }
+.stage text.cmd { font-family: var(--mono); font-size: 11px; font-weight: 400; opacity: 0.75; }
+.flow { stroke: var(--ink); stroke-width: 1.6; fill: none; }
+.flowlabel { fill: var(--muted); font-size: 11px; }
+.chip text { font-size: 12.5px; fill: var(--ink); }
+.chip text.sub { font-size: 10.5px; fill: var(--muted); }
+.chip text.name { font-family: var(--mono); font-weight: 600; font-size: 12px; }
+.c-lm rect { fill: var(--lm-bg); stroke: var(--lm); }
+.c-comfy rect { fill: var(--comfy-bg); stroke: var(--comfy); }
+.c-cv rect { fill: var(--cv-bg); stroke: var(--cv); }
+.c-mlx rect { fill: var(--mlx-bg); stroke: var(--mlx); }
+.c-plain rect { fill: var(--plain-bg); stroke: var(--plain); }
+.c-human rect { fill: var(--panel); stroke: var(--ink); stroke-dasharray: 4 3; }
+.chip rect { stroke-width: 1.6; }
+.link { stroke: var(--muted); stroke-width: 1.2; fill: none; }
+.divider { stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 6 5; }
+.zone { fill: var(--muted); font-size: 12px; font-weight: 500; }
+.runtime rect { stroke-width: 1.6; }
+.runtime text { font-size: 12.5px; fill: var(--ink); font-weight: 500; }
+.runtime text.sub { font-size: 10.5px; fill: var(--muted); font-weight: 400; }
+.hw rect { fill: none; stroke: var(--ink); stroke-width: 1.4; }
+.hw text { fill: var(--ink); font-size: 12px; }
+
+/* 表格 */
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+th, td { border-bottom: 1px solid var(--line); padding: 9px 10px; text-align: left; vertical-align: top; }
+th { color: var(--muted); font-weight: 500; font-size: 12.5px; white-space: nowrap; }
+td.m { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+.tag { display: inline-block; font-size: 11.5px; padding: 1px 7px; border-radius: 999px; border: 1.5px solid; margin: 1px 4px 1px 0; white-space: nowrap; }
+.t-lm { border-color: var(--lm); background: var(--lm-bg); }
+.t-comfy { border-color: var(--comfy); background: var(--comfy-bg); }
+.t-cv { border-color: var(--cv); background: var(--cv-bg); }
+.t-mlx { border-color: var(--mlx); background: var(--mlx-bg); }
+.t-plain { border-color: var(--plain); background: var(--plain-bg); }
+.t-retired { border-color: var(--plain); color: var(--muted); text-decoration: line-through; }
+
+/* 模型档案 */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-left: 5px solid var(--accent); border-radius: 10px; padding: 14px 16px; display: grid; gap: 8px; }
+.card.k-lm { border-left-color: var(--lm); } .card.k-comfy { border-left-color: var(--comfy); }
+.card.k-cv { border-left-color: var(--cv); } .card.k-mlx { border-left-color: var(--mlx); }
+.card.k-retired { border-left-color: var(--plain); opacity: 0.85; }
+.card h3 { font-family: var(--mono); font-size: 15px; }
+.card .who { color: var(--muted); font-size: 12.5px; }
+.card dl { display: grid; grid-template-columns: 5.2em 1fr; gap: 3px 10px; margin: 0; font-size: 13px; }
+.card dt { color: var(--muted); }
+.card dd { margin: 0; }
+.io { font-family: var(--mono); font-size: 12px; background: var(--bg); border-radius: 6px; padding: 6px 8px; }
+.pit { font-size: 12.5px; color: var(--warn); }
+
+.status-ok { color: var(--ok); font-weight: 600; }
+.status-bad { color: var(--bad); font-weight: 600; }
+.status-warn { color: var(--warn); font-weight: 600; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 14px; }
+ul { margin: 0; padding-left: 1.2em; }
+li + li { margin-top: 4px; }
+code { font-family: var(--mono); font-size: 0.9em; background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+@media (max-width: 480px) { main { padding: 20px 14px 48px; } h1 { font-size: 24px; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div>
+    <h1>ai-tools 模型知识图谱</h1>
+    <p class="lede">本地 AI 短剧流水线（MacBook Pro M5 Pro · 24G 统一内存）用到的每一个神经网络：它在哪个阶段出场、跑在哪个引擎上、输入什么输出什么，以及在 Mac 上踩过的坑。状态截至 2026-10-31 阶段二结束。</p>
+  </div>
+  <div class="legend" aria-label="颜色图例：按运行引擎区分">
+    <span><i class="dot d-lm"></i>LM Studio（大语言模型）</span>
+    <span><i class="dot d-comfy"></i>ComfyUI（扩散模型 · PyTorch MPS）</span>
+    <span><i class="dot d-cv"></i>OpenCV DNN（人脸 · CPU）</span>
+    <span><i class="dot d-mlx"></i>MLX（苹果芯片语音）</span>
+    <span><i class="dot d-plain"></i>非神经网络</span>
+  </div>
+</header>
+
+<section>
+  <h2>一、整条链路 <small>阶段 → 模型 → 引擎，颜色 = 运行引擎</small></h2>
+  <figure class="panel">
+    <div class="scroll">
+    <svg class="map" viewBox="0 0 1200 640" role="img" aria-label="六个流水线阶段从左到右排列，每个阶段下方是它调用的模型，模型按运行引擎着色，最底层是 M5 Pro 上的五个运行引擎；右侧虚线隔开的是离线校准和独立字幕工具">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- 区域标签 -->
+      <text class="zone" x="16" y="22">主流水线 · studio run</text>
+      <text class="zone" x="906" y="22">离线 / 旁路</text>
+      <line class="divider" x1="892" y1="10" x2="892" y2="440"/>
+
+      <!-- 阶段（6 列，每列 140，间距 8，起点 16） -->
+      <g class="stage">
+        <rect x="16" y="34" width="132" height="56" rx="8"/><text x="82" y="58" text-anchor="middle">① 拆分镜</text><text class="cmd" x="82" y="77" text-anchor="middle">studio plan</text>
+        <rect x="162" y="34" width="132" height="56" rx="8"/><text x="228" y="58" text-anchor="middle">② 定妆照</text><text class="cmd" x="228" y="77" text-anchor="middle">studio cast</text>
+        <rect x="308" y="34" width="132" height="56" rx="8"/><text x="374" y="58" text-anchor="middle">③ 出图</text><text class="cmd" x="374" y="77" text-anchor="middle">--only images</text>
+        <rect x="454" y="34" width="132" height="56" rx="8"/><text x="520" y="58" text-anchor="middle">④ AI 质检</text><text class="cmd" x="520" y="77" text-anchor="middle">studio qa</text>
+        <rect x="600" y="34" width="132" height="56" rx="8"/><text x="666" y="58" text-anchor="middle">⑤ 配音</text><text class="cmd" x="666" y="77" text-anchor="middle">--only audio</text>
+        <rect x="746" y="34" width="132" height="56" rx="8"/><text x="812" y="58" text-anchor="middle">⑥ 字幕 + 预览</text><text class="cmd" x="812" y="77" text-anchor="middle">subtitle/video</text>
+        <rect x="906" y="34" width="132" height="56" rx="8"/><text x="972" y="58" text-anchor="middle">⑦ 标注 + 校准</text><text class="cmd" x="972" y="77" text-anchor="middle">label/calibrate</text>
+        <rect x="1052" y="34" width="132" height="56" rx="8"/><text x="1118" y="58" text-anchor="middle">旁路 · 识别字幕</text><text class="cmd" x="1118" y="77" text-anchor="middle">srt 视频.mp4</text>
+      </g>
+
+      <!-- 阶段之间的数据流 -->
+      <g style="color: var(--ink)">
+        <line class="flow" x1="148" y1="62" x2="160" y2="62" marker-end="url(#arr)"/>
+        <line class="flow" x1="294" y1="62" x2="306" y2="62" marker-end="url(#arr)"/>
+        <line class="flow" x1="440" y1="62" x2="452" y2="62" marker-end="url(#arr)"/>
+        <line class="flow" x1="586" y1="62" x2="598" y2="62" marker-end="url(#arr)"/>
+        <line class="flow" x1="732" y1="62" x2="744" y2="62" marker-end="url(#arr)"/>
+        <!-- 质检不合格 → 回到出图 -->
+        <path class="flow" d="M500,90 C500,108 394,108 394,93" marker-end="url(#arr)" stroke-dasharray="4 3"/>
+        <text class="flowlabel" x="447" y="126" text-anchor="middle">不合格 · 换 seed 重画</text>
+      </g>
+
+      <!-- ① 拆分镜 -->
+      <g class="chip c-lm"><rect x="16" y="140" width="132" height="58" rx="8"/>
+        <text class="name" x="82" y="163" text-anchor="middle">gemma-4-e4b</text><text class="sub" x="82" y="182" text-anchor="middle">剧本 → 分镜表 JSON</text></g>
+
+      <!-- ② 定妆照 -->
+      <g class="chip c-comfy"><rect x="162" y="140" width="132" height="58" rx="8"/>
+        <text class="name" x="228" y="163" text-anchor="middle">klein 4B 文生图</text><text class="sub" x="228" y="182" text-anchor="middle">外貌描述 → 正脸照</text></g>
+      <g class="chip c-comfy"><rect x="162" y="210" width="132" height="58" rx="8"/>
+        <text class="name" x="228" y="233" text-anchor="middle">klein 4B 编辑</text><text class="sub" x="228" y="252" text-anchor="middle">正脸 → 左右 3/4 侧脸</text></g>
+      <g class="chip c-cv"><rect x="162" y="280" width="132" height="58" rx="8"/>
+        <text class="name" x="228" y="303" text-anchor="middle">YuNet + SFace</text><text class="sub" x="228" y="322" text-anchor="middle">侧脸 vs 正脸 ≥ 0.35</text></g>
+
+      <!-- ③ 出图 -->
+      <g class="chip c-comfy"><rect x="308" y="140" width="132" height="58" rx="8"/>
+        <text class="name" x="374" y="163" text-anchor="middle">klein 4B 编辑</text><text class="sub" x="374" y="182" text-anchor="middle">角色镜头 · 参考正脸</text></g>
+      <g class="chip c-comfy"><rect x="308" y="210" width="132" height="58" rx="8"/>
+        <text class="name" x="374" y="233" text-anchor="middle">klein 4B 文生图</text><text class="sub" x="374" y="252" text-anchor="middle">空镜 · 无角色</text></g>
+      <g class="chip c-comfy"><rect x="308" y="280" width="132" height="58" rx="8"/>
+        <text class="name" x="374" y="303" text-anchor="middle">Qwen3-4B</text><text class="sub" x="374" y="322" text-anchor="middle">文本编码器 · 读提示词</text></g>
+      <g class="chip c-comfy"><rect x="308" y="350" width="132" height="58" rx="8"/>
+        <text class="name" x="374" y="373" text-anchor="middle">FLUX.2 VAE</text><text class="sub" x="374" y="392" text-anchor="middle">参考图编码 / 结果解码</text></g>
+
+      <!-- ④ 质检 -->
+      <g class="chip c-cv"><rect x="454" y="140" width="132" height="58" rx="8"/>
+        <text class="name" x="520" y="163" text-anchor="middle">YuNet</text><text class="sub" x="520" y="182" text-anchor="middle">找脸 + 5 关键点</text></g>
+      <g class="chip c-cv"><rect x="454" y="210" width="132" height="58" rx="8"/>
+        <text class="name" x="520" y="233" text-anchor="middle">SFace</text><text class="sub" x="520" y="252" text-anchor="middle">128 维特征 · 余弦 ≥ 0.40</text></g>
+      <g class="chip c-lm"><rect x="454" y="280" width="132" height="58" rx="8"/>
+        <text class="name" x="520" y="303" text-anchor="middle">gemma-4-e4b</text><text class="sub" x="520" y="322" text-anchor="middle">画面分 · 瑕疵 · 表情 👀</text></g>
+      <line class="link" x1="520" y1="198" x2="520" y2="210"/>
+
+      <!-- ⑤ 配音 -->
+      <g class="chip c-mlx"><rect x="600" y="140" width="132" height="58" rx="8"/>
+        <text class="name" x="666" y="163" text-anchor="middle">Qwen3-TTS 1.7B</text><text class="sub" x="666" y="182" text-anchor="middle">台词 + 音色 + 语气 → wav</text></g>
+
+      <!-- ⑥ 字幕 + 预览 -->
+      <g class="chip c-plain"><rect x="746" y="140" width="132" height="58" rx="8"/>
+        <text class="name" x="812" y="163" text-anchor="middle">时间轴算法</text><text class="sub" x="812" y="182" text-anchor="middle">台词 + 配音时长 → srt</text></g>
+      <g class="chip c-plain"><rect x="746" y="210" width="132" height="58" rx="8"/>
+        <text class="name" x="812" y="233" text-anchor="middle">ffmpeg</text><text class="sub" x="812" y="252" text-anchor="middle">图 + 音 → preview.mp4</text></g>
+
+      <!-- ⑦ 标注 + 校准 -->
+      <g class="chip c-human"><rect x="906" y="140" width="132" height="58" rx="8"/>
+        <text class="name" x="972" y="163" text-anchor="middle">人眼（你）</text><text class="sub" x="972" y="182" text-anchor="middle">盲标"像 / 不像"</text></g>
+      <g class="chip c-comfy"><rect x="906" y="210" width="132" height="58" rx="8"/>
+        <text class="name" x="972" y="233" text-anchor="middle">klein 4B 文生图</text><text class="sub" x="972" y="252" text-anchor="middle">对照组 · 6 个不同的人</text></g>
+      <g class="chip c-cv"><rect x="906" y="280" width="132" height="58" rx="8"/>
+        <text class="name" x="972" y="303" text-anchor="middle">YuNet + SFace</text><text class="sub" x="972" y="322" text-anchor="middle">两两比对 → 定阈值</text></g>
+
+      <!-- 旁路 srt -->
+      <g class="chip c-mlx"><rect x="1052" y="140" width="132" height="58" rx="8"/>
+        <text class="name" x="1118" y="163" text-anchor="middle">Whisper v3-turbo</text><text class="sub" x="1118" y="182" text-anchor="middle">已有视频 → srt</text></g>
+
+      <!-- 校准结果回流到质检 -->
+      <polyline class="flow" points="906,320 884,320 884,426 604,426 604,248 590,248" marker-end="url(#arr)" stroke-dasharray="4 3" style="color: var(--ink)"/>
+      <text class="flowlabel" x="744" y="418" text-anchor="middle">校准出的阈值 0.40 写回质检</text>
+
+      <!-- 引擎层 -->
+      <text class="zone" x="16" y="452">运行引擎</text>
+      <g class="runtime">
+        <g class="c-lm"><rect x="16" y="462" width="212" height="52" rx="8" style="fill: var(--lm-bg); stroke: var(--lm)"/>
+          <text x="122" y="484" text-anchor="middle">LM Studio</text><text class="sub" x="122" y="502" text-anchor="middle">llama.cpp / MLX · OpenAI 兼容 API :1234</text></g>
+        <g><rect x="240" y="462" width="212" height="52" rx="8" style="fill: var(--comfy-bg); stroke: var(--comfy)"/>
+          <text x="346" y="484" text-anchor="middle">ComfyUI</text><text class="sub" x="346" y="502" text-anchor="middle">PyTorch · MPS(GPU) · 工作流 API :8188</text></g>
+        <g><rect x="464" y="462" width="212" height="52" rx="8" style="fill: var(--cv-bg); stroke: var(--cv)"/>
+          <text x="570" y="484" text-anchor="middle">OpenCV DNN</text><text class="sub" x="570" y="502" text-anchor="middle">ONNX · CPU · 毫秒级</text></g>
+        <g><rect x="688" y="462" width="212" height="52" rx="8" style="fill: var(--mlx-bg); stroke: var(--mlx)"/>
+          <text x="794" y="484" text-anchor="middle">MLX（mlx-audio / mlx-whisper）</text><text class="sub" x="794" y="502" text-anchor="middle">苹果芯片原生 · 统一内存</text></g>
+        <g><rect x="912" y="462" width="272" height="52" rx="8" style="fill: var(--plain-bg); stroke: var(--plain)"/>
+          <text x="1048" y="484" text-anchor="middle">ffmpeg + Python 编排层（studio）</text><text class="sub" x="1048" y="502" text-anchor="middle">调度 · 断点续跑 · 内存轮换 · 报告</text></g>
+      </g>
+
+      <!-- 硬件 -->
+      <g class="hw"><rect x="16" y="540" width="1168" height="44" rx="8"/>
+        <text x="600" y="567" text-anchor="middle">MacBook Pro · M5 Pro · 24G 统一内存 —— 大模型轮流加载：出图（~15G）→ 释放 → 看图质检（~7G）→ 卸载 → 配音（~4G）</text></g>
+      <text class="flowlabel" x="16" y="610">提示：同一阶段里的模型自上而下就是调用顺序；虚线箭头是反馈回路（重画、阈值回写）。</text>
+    </svg>
+    </div>
+    <figcaption>主流水线 6 个阶段共用 4 类神经网络：FLUX.2 klein（画）、gemma-4（读和看）、YuNet + SFace（认脸）、Qwen3-TTS（说）。字幕和视频不需要神经网络。</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>二、阶段 × 模型对照表 <small>谁在什么时候干什么</small></h2>
+  <div class="panel scroll">
+  <table>
+    <thead><tr><th>阶段</th><th>命令 / 代码</th><th>用到的模型</th><th>输入 → 输出</th><th>实测</th></tr></thead>
+    <tbody>
+      <tr><td>① 拆分镜</td><td class="m">studio plan · plan.py</td><td><span class="tag t-lm">gemma-4-e4b</span></td><td>剧本文本 → 分镜表 JSON（角色、镜头、台词、音色、语气），JSON Schema 约束输出</td><td>一两分钟；中文长剧本建议换 Qwen 14B</td></tr>
+      <tr><td>② 定妆照</td><td class="m">studio cast · qa.py</td><td><span class="tag t-comfy">klein 文生图</span><span class="tag t-comfy">klein 编辑</span><span class="tag t-cv">YuNet + SFace</span></td><td>角色外貌描述 → 正脸照；正脸照 → 左右 3/4 侧脸；侧脸和正脸比对 ≥ 0.35 才采用</td><td>3 张约 2~3 分钟</td></tr>
+      <tr><td>③ 出图</td><td class="m">--only images · qa.py / comfy.py</td><td><span class="tag t-comfy">klein 编辑</span><span class="tag t-comfy">klein 文生图</span><span class="tag t-comfy">Qwen3-4B 编码器</span><span class="tag t-comfy">FLUX.2 VAE</span></td><td>有角色：提示词 + 正脸定妆照 → 剧照；空镜：提示词 → 剧照（768×1344，4 步）</td><td>40~60 秒 / 张</td></tr>
+      <tr><td>④ AI 质检</td><td class="m">studio qa · face.py / vision.py</td><td><span class="tag t-cv">YuNet</span><span class="tag t-cv">SFace</span><span class="tag t-lm">gemma-4-e4b</span></td><td>剧照 → 人脸相似度（和三张定妆照 + 已通过镜头比，取最高）、画面分 1~5、瑕疵、表情是否夸张</td><td>每张约 2 秒；阈值 0.40</td></tr>
+      <tr><td>⑤ 配音</td><td class="m">--only audio · tts.py</td><td><span class="tag t-mlx">Qwen3-TTS 1.7B</span></td><td>台词 + 音色（Vivian / Uncle_Fu…）+ 语气指令 → wav</td><td>约 8.5 秒 / 句，首句含加载 19 秒</td></tr>
+      <tr><td>⑥ 字幕 + 预览</td><td class="m">subtitle.py / video.py</td><td><span class="tag t-plain">时间轴算法</span><span class="tag t-plain">ffmpeg</span></td><td>台词 + 配音时长 → srt（每条 ≤ 16 字）；图 + 音 + srt → preview.mp4</td><td>几秒</td></tr>
+      <tr><td>⑦ 标注 + 校准</td><td class="m">studio label / calibrate</td><td><span class="tag t-plain">人眼</span><span class="tag t-comfy">klein 文生图</span><span class="tag t-cv">YuNet + SFace</span></td><td>人工"像 / 不像" + 对照组 → 两组分数分布 → 阈值、误拒率、误收率</td><td>两轮校准后阈值 0.40</td></tr>
+      <tr><td>旁路 · 识别字幕</td><td class="m">srt 视频.mp4</td><td><span class="tag t-mlx">Whisper large-v3-turbo</span></td><td>已有视频的语音 → 带时间轴的简体中文 srt</td><td>1 分钟视频十几秒</td></tr>
+      <tr><td>已退役</td><td class="m">t2i_profile = "t2i_moss"</td><td><span class="tag t-retired">MOSS-Image 5B</span><span class="tag t-retired">Qwen3.5-9B GPTQ</span></td><td>阶段一的文生图方案，保留在配置里做对比</td><td>3.9 分钟 / 张</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>三、模型档案 <small>每个神经网络是什么</small></h2>
+  <div class="cards">
+    <article class="card k-comfy">
+      <h3>FLUX.2 klein 4B</h3>
+      <p class="who">Black Forest Labs · Apache 2.0 · 主力出图模型</p>
+      <dl>
+        <dt>类型</dt><dd>扩散模型（rectified flow transformer），文生图和参考图编辑一体</dd>
+        <dt>规模</dt><dd>4B 参数，蒸馏版只需 4 步去噪</dd>
+        <dt>文件</dt><dd><code>flux-2-klein-4b.safetensors</code> bf16，7.75GB</dd>
+        <dt>搭档</dt><dd>Qwen3-4B 文本编码器 + FLUX.2 VAE</dd>
+        <dt>引擎</dt><dd>ComfyUI（PyTorch MPS）</dd>
+      </dl>
+      <p class="io">提示词 [+ 参考图] → 768×1344 剧照</p>
+      <p class="pit">坑：模板默认的 fp8 版本在 Mac 上直接报错，必须用 bf16。</p>
+    </article>
+    <article class="card k-comfy">
+      <h3>Qwen3-4B（文本编码器）</h3>
+      <p class="who">阿里通义 · klein 的"耳朵"</p>
+      <dl>
+        <dt>类型</dt><dd>语言模型，这里只用它把提示词编码成向量，不生成文字</dd>
+        <dt>文件</dt><dd><code>qwen_3_4b.safetensors</code>，约 7.5GB</dd>
+        <dt>位置</dt><dd><code>text_encoders/</code></dd>
+      </dl>
+      <p class="io">英文提示词 → 条件向量（conditioning）</p>
+    </article>
+    <article class="card k-comfy">
+      <h3>FLUX.2 VAE</h3>
+      <p class="who">Black Forest Labs · 图片和"潜空间"之间的翻译</p>
+      <dl>
+        <dt>类型</dt><dd>变分自编码器：编码器把图压进潜空间，解码器还原成图</dd>
+        <dt>文件</dt><dd><code>flux2-vae.safetensors</code>，约 0.3GB</dd>
+        <dt>用途</dt><dd>编辑模式下先编码参考图（ReferenceLatent），最后解码结果</dd>
+      </dl>
+      <p class="io">像素 ⇄ 潜空间</p>
+      <p class="pit">坑：MOSS 用的 flux2-vae_small 是精简版，不要和 klein 混用。</p>
+    </article>
+    <article class="card k-lm">
+      <h3>gemma-4-e4b</h3>
+      <p class="who">Google DeepMind · 能看图的语言模型</p>
+      <dl>
+        <dt>类型</dt><dd>多模态大语言模型：视觉编码器 + 语言模型</dd>
+        <dt>规模</dt><dd>7.9B 参数，运行开销约等于 4B（effective 4B）</dd>
+        <dt>文件</dt><dd>6.86GB</dd>
+        <dt>两份工作</dt><dd>拆分镜（读剧本）、看图质检（打分、找瑕疵、判断表情）</dd>
+        <dt>引擎</dt><dd>LM Studio，OpenAI 兼容接口，空闲 300 秒自动卸载</dd>
+      </dl>
+      <p class="io">文字 [+ 图片] → JSON（按 Schema 约束）</p>
+      <p class="pit">局限：不让它判断"是不是同一个人"，输出不稳定、小模型分辨力弱。</p>
+    </article>
+    <article class="card k-cv">
+      <h3>YuNet</h3>
+      <p class="who">南方科技大学于仕琪团队 · MIT · 人脸检测</p>
+      <dl>
+        <dt>类型</dt><dd>轻量卷积网络（CNN）</dd>
+        <dt>文件</dt><dd><code>face_detection_yunet_2023mar.onnx</code>，约 230KB</dd>
+        <dt>输出</dt><dd>每张脸 15 个数：框、5 个关键点（双眼、鼻尖、嘴角）、置信度</dd>
+        <dt>额外用途</dt><dd>用关键点估算脸的转向（yaw）和大小，写进报告</dd>
+      </dl>
+      <p class="io">整张图 → 人脸框 + 关键点</p>
+    </article>
+    <article class="card k-cv">
+      <h3>SFace</h3>
+      <p class="who">OpenCV Zoo · Apache 2.0 · 人脸识别</p>
+      <dl>
+        <dt>类型</dt><dd>人脸识别网络，度量学习训练（同一人靠近、不同人推远）</dd>
+        <dt>文件</dt><dd><code>face_recognition_sface_2021dec.onnx</code>，约 37MB</dd>
+        <dt>输出</dt><dd>128 维特征向量，两两算余弦相似度</dd>
+        <dt>阈值</dt><dd>官方 0.363（真人照片）→ 自测 0.40（klein 生成的脸）</dd>
+      </dl>
+      <p class="io">摆正的 112×112 人脸 → 128 个数字</p>
+      <p class="pit">局限：小脸、侧脸、极端表情会压低分数；大笑闭眼时和人眼判断不一致。</p>
+    </article>
+    <article class="card k-mlx">
+      <h3>Qwen3-TTS 1.7B CustomVoice</h3>
+      <p class="who">阿里通义 · 语音合成</p>
+      <dl>
+        <dt>类型</dt><dd>文本转语音模型，内置多个中文音色，支持自然语言语气指令</dd>
+        <dt>音色</dt><dd>Vivian、Serena、Uncle_Fu（旁白）、Eric（四川话）、Dylan（北京话）</dd>
+        <dt>引擎</dt><dd>mlx-audio（MLX，苹果芯片原生）</dd>
+      </dl>
+      <p class="io">台词 + 音色 + "紧张，压低声音" → wav</p>
+    </article>
+    <article class="card k-mlx">
+      <h3>Whisper large-v3-turbo</h3>
+      <p class="who">OpenAI · 语音识别 · 旁路工具</p>
+      <dl>
+        <dt>类型</dt><dd>编码器-解码器 Transformer，语音转文字</dd>
+        <dt>文件</dt><dd>约 1.6GB（国内经 hf-mirror 下载）</dd>
+        <dt>引擎</dt><dd>mlx-whisper</dd>
+        <dt>为什么不进流水线</dt><dd>流水线的台词已知，按配音时长直接算字幕更准更快</dd>
+      </dl>
+      <p class="io">视频语音 → srt（加初始提示避免繁体）</p>
+    </article>
+    <article class="card k-retired">
+      <h3>MOSS-Image 5B（已退役）</h3>
+      <p class="who">OpenMOSS · 阶段一的文生图模型</p>
+      <dl>
+        <dt>类型</dt><dd>扩散模型（单流 DiT），支持画框布局控制</dd>
+        <dt>文件</dt><dd>int8 主模型 + Qwen3.5-9B（GPTQ W4A8）文本编码器 + flux2-vae_small</dd>
+        <dt>速度</dt><dd>25 步 × 8.5 秒 ≈ 3.9 分钟 / 张</dd>
+        <dt>退役原因</dt><dd>纯文字描述锁不住长相，跨镜头一致性只有 0.26</dd>
+      </dl>
+      <p class="pit">坑：提示词扩写（9B GPTQ）8 分钟只走 2%；9:16 取整成 768×1360 会算出 NaN 黑图。</p>
+    </article>
+  </div>
+</section>
+
+<section class="two">
+  <div class="panel" style="display:grid; gap:12px">
+    <h2>四、Mac 上的模型格式 <small>同一个模型，格式决定能不能跑</small></h2>
+    <table>
+      <thead><tr><th>格式</th><th>为谁优化</th><th>在 M5 Pro 上</th><th>遇到的地方</th></tr></thead>
+      <tbody>
+        <tr><td class="m">bf16</td><td>通用</td><td class="status-ok">✅ 原生支持</td><td>klein 4B、Qwen3-4B</td></tr>
+        <tr><td class="m">MLX 4/8bit</td><td>苹果芯片</td><td class="status-ok">✅ 最快</td><td>LM Studio 模型、Qwen3-TTS、Whisper</td></tr>
+        <tr><td class="m">int8 convrot</td><td>NVIDIA</td><td class="status-warn">⚠️ 能跑但慢</td><td>MOSS-Image 主模型</td></tr>
+        <tr><td class="m">GPTQ W4A8</td><td>NVIDIA</td><td class="status-bad">❌ 慢到不可用</td><td>MOSS 的 9B 文本编码器</td></tr>
+        <tr><td class="m">fp8 e4m3fn</td><td>新款 NVIDIA</td><td class="status-bad">❌ MPS 直接报错</td><td>klein 模板默认文件</td></tr>
+      </tbody>
+    </table>
+    <p style="color:var(--muted); font-size:13px">经验：Mac 上优先选 bf16 或 MLX 格式；文件名里带 fp8、gptq、int8 的先打个问号。</p>
+  </div>
+  <div class="panel" style="display:grid; gap:12px">
+    <h2>五、几个关键设计 <small>为什么这么分工</small></h2>
+    <ul>
+      <li><strong>专用引擎 + 统一编排</strong>：语言模型放 LM Studio、扩散模型放 ComfyUI、语音放 MLX；同一个 9B 语言模型放进 ComfyUI 跑，8 分钟只走 2%。</li>
+      <li><strong>认脸用 SFace，不用大模型</strong>：输出确定、可量化、毫秒级；大模型留给"画面对不对、表情怎样"这类需要理解的判断。</li>
+      <li><strong>能挑不能造</strong>：换 seed 重画只能在随机结果里挑，参考图生成才能锁住长相（0.26 → 0.58）。</li>
+      <li><strong>定妆照和剧照同一个模型</strong>：风格统一后分数整体上升。</li>
+      <li><strong>人眼是最终标准</strong>：阈值用人工标注 + 对照组校准，官方 0.363 只是起点。</li>
+      <li><strong>24G 轮流用</strong>：出图、看图、配音三个大模型不同时常驻，每一步结束主动释放。</li>
+    </ul>
+  </div>
+</section>
+</main>
+</body>
+</html>
