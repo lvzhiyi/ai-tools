@@ -47,7 +47,8 @@ def cmd_plan(cfg: dict, args) -> int:
     from .plan import plan
 
     script = Path(args.script).read_text(encoding="utf-8")
-    print("正在拆分镜（本地优先，已配置时云端兜底；小模型可能要一两分钟）...")
+    mode_name = {"local": "仅本地", "cloud": "仅云端", "auto": "本地优先，云端兜底"}[cfg["lmstudio"].get("routing_mode", "auto")]
+    print(f"正在拆分镜（{mode_name}）...")
     sb = plan(script, cfg["lmstudio"], max_shots=args.max_shots)
     out = ROOT / "storyboards" / f"{Path(args.script).stem}.json"
     out.write_text(json.dumps(sb, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -190,6 +191,7 @@ def cmd_web(cfg: dict, args) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="studio", description="本地 AI 短剧生产线")
+    p.add_argument("--llm-mode", choices=["local", "cloud", "auto"], help="拆分镜/看图：仅本地、仅云端或自动兜底")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("check", help="检查环境")
@@ -243,6 +245,9 @@ def main(argv: list[str] | None = None) -> int:
 
     args = p.parse_args(argv)
     cfg = load_config()
+    if args.llm_mode:
+        cfg["lmstudio"]["routing_mode"] = args.llm_mode
+        cfg["lmstudio"].setdefault("cloud", {})["enabled"] = args.llm_mode != "local"
     if getattr(args, "no_qa", False):
         cfg.setdefault("qa", {})["enabled"] = False
     if getattr(args, "no_edit", False) and isinstance(cfg["comfy"].get("edit"), dict):

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { api, type Job } from "./api";
+import { api, type Job, type ModelMode, type ModelRouting } from "./api";
 
 // ------------------------------------------------------------------ 数据加载
 export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
@@ -52,6 +52,18 @@ interface JobsState {
 const JobsCtx = createContext<JobsState>({ jobs: [], submit: async () => null, onFinish: () => () => {}, refresh: () => {} });
 export const useJobs = () => useContext(JobsCtx);
 
+interface ModelRoutingState {
+  data: ModelRouting | null;
+  error: string | null;
+  pending: ModelMode | null;
+  loading: boolean;
+  reload: () => void;
+  choose: (mode: ModelMode) => Promise<void>;
+}
+const ModelRoutingCtx = createContext<ModelRoutingState>({ data: null, error: null, pending: null,
+  loading: true, reload: () => {}, choose: async () => {} });
+export const useModelRouting = () => useContext(ModelRoutingCtx);
+
 export function Providers({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toast = useCallback((text: string, kind: Toast["kind"] = "info", link?: string) => {
@@ -59,6 +71,23 @@ export function Providers({ children }: { children: ReactNode }) {
     setToasts((t) => [...t, { id, text, kind, link }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), kind === "fail" ? 9000 : 5000);
   }, []);
+
+  const routing = useAsync(() => api.modelRouting(), []);
+  const [pendingMode, setPendingMode] = useState<ModelMode | null>(null);
+  const [routingError, setRoutingError] = useState<string | null>(null);
+  const chooseMode = async (mode: ModelMode) => {
+    setPendingMode(mode);
+    setRoutingError(null);
+    try {
+      const data = await api.setModelRouting(mode);
+      routing.setData(data);
+      toast("模型模式已保存，对新提交的任务生效", "ok");
+    } catch (error) {
+      setRoutingError((error as Error).message);
+    } finally {
+      setPendingMode(null);
+    }
+  };
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const prev = useRef<Map<string, string>>(new Map());
@@ -85,6 +114,10 @@ export function Providers({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const submit = useCallback(async (kind: string, file: string | null, options: Record<string, unknown> = {}) => {
+    if (pendingMode || routing.loading || routing.error || routingError) {
+      toast("模型模式正在保存或尚未加载，请稍后重试", "info");
+      return null;
+    }
     try {
       const job = await api.submit(kind, file, options);
       toast(`已加入队列：${job.title}`, "info", href("jobs", job.id));
@@ -94,7 +127,7 @@ export function Providers({ children }: { children: ReactNode }) {
       toast(String((e as Error).message), "fail");
       return null;
     }
-  }, [refresh, toast]);
+  }, [refresh, toast, pendingMode, routing.loading, routing.error, routingError]);
   const onFinish = useCallback((fn: (j: Job) => void) => {
     listeners.current.add(fn);
     return () => { listeners.current.delete(fn); };
@@ -103,7 +136,10 @@ export function Providers({ children }: { children: ReactNode }) {
   return (
     <ToastCtx.Provider value={toast}>
       <JobsCtx.Provider value={{ jobs, submit, onFinish, refresh }}>
-        {children}
+        <ModelRoutingCtx.Provider value={{ data: routing.data, error: routingError || routing.error,
+          pending: pendingMode, loading: routing.loading, reload: () => { setRoutingError(null); routing.reload(); }, choose: chooseMode }}>
+          {children}
+        </ModelRoutingCtx.Provider>
         <div className="toasts">
           {toasts.map((t) => (
             <div key={t.id} className={`toast ${t.kind}`} onClick={() => t.link && (window.location.hash = t.link.slice(1))}>

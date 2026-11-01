@@ -15,7 +15,8 @@
   GET  /scripts  POST /scripts  GET /scripts/{file}    剧本
   GET  /calibrations                 校准报告
   GET  /history                      所有运行的历史（runs.csv）
-  GET  /config                       当前配置（只读）
+  GET  /config                       当前配置（只读，无效密钥环境变量名隐藏）
+  GET/PUT /model-routing             网页模型模式（local / cloud / auto）
   GET  /jobs  POST /jobs  GET /jobs/{id}  POST /jobs/{id}/cancel
   GET  /jobs/{id}/events             SSE：任务日志和状态，实时推送
 静态文件：/files/... → output/ 下的图、视频、音频；/ → 前端页面（studio/web/static）
@@ -23,6 +24,8 @@
 from __future__ import annotations
 
 import asyncio
+import copy
+import re
 import json
 import random
 import threading
@@ -94,7 +97,23 @@ async def get_checks(request: Request):
 
 @handle
 async def get_config(request: Request):
-    return ok(load_config())
+    cfg = copy.deepcopy(load_config())
+    cloud = cfg.get("lmstudio", {}).get("cloud", {})
+    key_env = cloud.get("api_key_env", "")
+    if not isinstance(key_env, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key_env):
+        cloud["api_key_env"] = "（无效环境变量名，已隐藏）"
+    return ok(cfg)
+
+
+@handle
+async def model_routing(request: Request):
+    from . import model_routing as routing
+    if request.method == "PUT":
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError("请求必须包含模型模式 mode")
+        routing.set_mode(body.get("mode"))
+    return ok(routing.status())
 
 
 @handle
@@ -315,6 +334,7 @@ def create_app() -> Starlette:
     (ROOT / "output").mkdir(exist_ok=True)
     api = [
         Route("/overview", overview), Route("/checks", get_checks), Route("/config", get_config),
+        Route("/model-routing", model_routing, methods=["GET", "PUT"]),
         Route("/history", get_history),
         Route("/storyboards", storyboards, methods=["GET", "POST"]),
         Route("/storyboards/{file}", storyboard, methods=["GET", "PUT"]),

@@ -40,6 +40,8 @@ def cloud_status(cfg: dict, *, vision: bool = False) -> tuple[bool, str]:
     if not cloud.get(field, "").strip():
         return False, f"未配置云端 {field}"
     key_env = cloud.get("api_key_env", "STUDIO_CLOUD_API_KEY")
+    if not isinstance(key_env, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key_env):
+        return False, "api_key_env 应填写环境变量名（如 STUDIO_CLOUD_API_KEY），不能填写密钥本身"
     if not os.environ.get(key_env, "").strip():
         return False, f"未设置云端密钥环境变量 {key_env}"
     return True, "已配置（未发起云端请求）"
@@ -99,38 +101,54 @@ def _request(cfg: dict, messages: list[dict], schema: dict | None, *,
 
 def chat(cfg: dict, messages: list[dict], schema: dict | None = None, *,
          model: str | None = None, temperature: float = 0.2, timeout: float = 600) -> dict | str:
-    """先本地，失败时最多尝试一次显式启用且配置完整的云端。"""
+    """支持仅本地、仅云端和自动兜底；默认沿用本地优先。"""
     validator = None
     if schema is not None:
         cls = validator_for(schema)
         cls.check_schema(schema)  # 编程错误不触发云端调用
         validator = cls(schema)
+    mode = cfg.get("routing_mode", "auto")
+    if mode not in {"local", "cloud", "auto"}:
+        raise LLMError("未知模型模式")
+    vision = any(isinstance(m.get("content"), list) and any(
+        isinstance(p, dict) and p.get("type") == "image_url" for p in m["content"]
+    ) for m in messages)
+
+    def request_cloud():
+        ready, reason = cloud_status(cfg, vision=vision)
+        if not ready:
+            raise LLMError(f"云端不可用：{reason}")
+        cloud = cfg["cloud"]
+        return _request(cloud, messages, schema, model=cloud["vision_model" if vision else "model"],
+                        temperature=temperature, timeout=timeout, cloud=True, validator=validator)
+
+    if mode == "cloud":
+        return request_cloud()
     try:
         return _request(cfg, messages, schema, model=model or cfg["model"],
                         temperature=temperature, timeout=timeout, cloud=False, validator=validator)
     except LLMError as local_error:
-        vision = any(isinstance(m.get("content"), list) and any(
-            isinstance(p, dict) and p.get("type") == "image_url" for p in m["content"]
-        ) for m in messages)
+        if mode == "local":
+            raise
         ready, reason = cloud_status(cfg, vision=vision)
         if not ready:
             raise LLMError(f"{local_error}；云端不可用：{reason}") from None
         logging.getLogger(__name__).warning("%s；切换云端兜底%s", local_error, "（含图片）" if vision else "")
-        cloud = cfg["cloud"]
-        cloud_model = cloud["vision_model" if vision else "model"]
         try:
-            return _request(cloud, messages, schema, model=cloud_model,
-                            temperature=temperature, timeout=timeout, cloud=True, validator=validator)
+            return request_cloud()
         except LLMError as cloud_error:
             raise LLMError(f"本地和云端均失败：{local_error}；{cloud_error}") from None
 
 
 def available(cfg: dict, *, vision: bool = False) -> bool:
+    mode = cfg.get("routing_mode", "auto")
+    if mode == "cloud":
+        return cloud_status(cfg, vision=vision)[0]
     try:
         with urllib.request.urlopen(cfg["url"].rstrip("/") + "/models", timeout=3):
             return True
     except (OSError, ValueError, http.client.HTTPException):
-        return cloud_status(cfg, vision=vision)[0]
+        return mode != "local" and cloud_status(cfg, vision=vision)[0]
 
 
 def image_part(path: Path, max_side: int = 768) -> dict:

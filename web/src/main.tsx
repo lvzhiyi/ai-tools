@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 import { Providers, href, useJobs, useRoute } from "./hooks";
 import { Progress, jobElapsed } from "./components/ui";
+import { ModelSelector } from "./components/ModelSelector";
 import { Dashboard } from "./pages/Dashboard";
 import { Projects } from "./pages/Projects";
 import { ProjectPage } from "./pages/Project";
@@ -71,6 +72,7 @@ function App() {
         <div className="side-foot muted small">uv run studio web</div>
       </aside>
       <main className="main">
+        <ModelSelector />
         <JobBar />
         <div className="content">{body}</div>
       </main>

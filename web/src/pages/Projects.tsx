@@ -18,7 +18,7 @@ export function Projects() {
       </div>
       {creating ? <NewStoryboard onDone={() => setCreating(false)} /> : null}
       {error ? <ErrorBox error={error} onRetry={reload} /> : !data ? <Loading /> : !data.length ? (
-        <Empty title="还没有分镜表">在「剧本」里粘贴故事，让本地模型拆成分镜；或者新建一张空白分镜表手写。</Empty>
+        <Empty title="还没有分镜表">在「剧本」里粘贴故事，按顶部模型模式拆成分镜；或者新建一张空白分镜表手写。</Empty>
       ) : (
         <div className="project-grid">
           {data.map((p) => {

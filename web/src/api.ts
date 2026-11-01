@@ -1,5 +1,13 @@
 // 后端接口的类型和请求函数。字段和 studio/web/projects.py、jobs.py 返回的结构一一对应。
 
+export type ModelMode = "local" | "cloud" | "auto";
+export interface ModelRouting {
+  mode: ModelMode;
+  local_model: string;
+  cloud_text: { ready: boolean; detail: string };
+  cloud_vision: { ready: boolean; detail: string };
+}
+
 export type Status = "ok" | "warn" | "fail";
 export interface Check { name: string; status: Status; detail: string }
 
@@ -86,6 +94,8 @@ const enc = encodeURIComponent;
 export const api = {
   overview: () => req<Overview>("GET", "/api/overview"),
   checks: () => req<Check[]>("GET", "/api/checks"),
+  modelRouting: () => req<ModelRouting>("GET", "/api/model-routing"),
+  setModelRouting: (mode: ModelMode) => req<ModelRouting>("PUT", "/api/model-routing", { mode }),
   config: () => req<Record<string, unknown>>("GET", "/api/config"),
   history: (project?: string) => req<HistoryRow[]>("GET", "/api/history" + (project ? `?project=${enc(project)}` : "")),
   storyboards: () => req<StoryboardItem[]>("GET", "/api/storyboards"),

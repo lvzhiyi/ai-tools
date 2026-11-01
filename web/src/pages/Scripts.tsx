@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { api, fmtTime } from "../api";
-import { go, href, useAsync, useJobs, useOnProjectJobFinished, useToast } from "../hooks";
+import { go, href, useAsync, useJobs, useOnProjectJobFinished, useToast, useModelRouting } from "../hooks";
 import { Field, Loading } from "../components/ui";
 
 export function Scripts({ selected }: { selected?: string }) {
   const list = useAsync(() => api.scripts(), []);
   const { submit, jobs } = useJobs();
   const toast = useToast();
+  const routing = useModelRouting();
+  const modeLabel = { local: "本地模型", cloud: "云端模型", auto: "自动模式" }[routing.data?.mode || "local"];
   const [name, setName] = useState(selected?.replace(/\.txt$/, "") || "");
   const [text, setText] = useState("");
   const [maxShots, setMaxShots] = useState(12);
@@ -68,10 +70,10 @@ export function Scripts({ selected }: { selected?: string }) {
             <button className="btn" disabled={!name.trim() || !text.trim()} onClick={() => save().then(() => toast("已保存", "ok"), (e) => toast(e.message, "fail"))}>
               保存{dirty ? " *" : ""}
             </button>
-            <button className="btn primary" disabled={!name.trim() || !text.trim() || planning} onClick={plan}>
-              {planning ? "正在拆分镜…" : "用本地模型拆分镜"}
+            <button className="btn primary" disabled={!name.trim() || !text.trim() || planning || routing.loading || !!routing.pending || !!routing.error} onClick={plan}>
+              {planning ? "正在拆分镜…" : `用${modeLabel}拆分镜`}
             </button>
-            <span className="muted small">需要先打开 LM Studio 的 Server 并加载模型；拆完记得卸载模型，把内存让给出图。</span>
+            <span className="muted small">使用顶部选择的模型模式。本地调用需要 LM Studio Server；仅云端模式直接请求云端。</span>
           </div>
         </section>
       </div>

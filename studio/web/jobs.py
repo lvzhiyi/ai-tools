@@ -80,6 +80,8 @@ class JobManager:
 
     # ---------------------------------------------------------------- 提交 / 取消
     def submit(self, kind: str, argv: list[str], title: str, project: str | None = None) -> Job:
+        from .model_routing import get_mode
+        argv = ["--llm-mode", get_mode(), *argv]
         job = Job(id=time.strftime("%m%d-%H%M%S-") + uuid.uuid4().hex[:4], kind=kind, title=title,
                   argv=argv, project=project)
         with self.lock:

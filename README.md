@@ -202,7 +202,27 @@ uv run studio check     # 检查环境
 
 拆分镜（`studio plan`）和看图质检共用 `studio/llm.py`，网页操作也走这条路径。默认 `[lmstudio.cloud] enabled = false`，目前只有本地模型时无需改配置，也不会产生云端请求。
 
-每次先请求本地；连接失败、超时、HTTP 错误、空输出、接口结构异常、无效 JSON 或结果不符合 schema 时，才尝试一次云端。两端都失败会报告各端失败原因；取消任务不会触发兜底。云端文本和图片分别选择 `model`、`vision_model`，不会沿用本地模型名。人脸比对、出图、配音和图生视频仍按原有流程执行。
+默认自动模式先请求本地；连接失败、超时、HTTP 错误、空输出、接口结构异常、无效 JSON 或结果不符合 schema 时，才尝试一次云端。两端都失败会报告各端失败原因；取消任务不会触发兜底。云端文本和图片分别选择 `model`、`vision_model`，不会沿用本地模型名。人脸比对、出图、配音和图生视频仍按原有流程执行。
+
+网页顶部的「模型调用」提供三档：
+
+| 模式 | 行为 |
+|---|---|
+| 仅本地 | 只调用 LM Studio，失败不使用云端 |
+| 仅云端 | 直接调用已配置的云端，失败不回退本地 |
+| 本地优先、云端兜底 | 先本地，失败后尝试云端 |
+
+选择保存到 `output/_web/model-routing.json`，刷新或重启保留，不修改 `config.toml`。每个新任务在提交时记录模式，已排队和运行中的任务不会因后续切换改变。只影响拆分镜和看图质检，出图、视频和配音引擎不变。顶部可展开查看云端文本/看图配置状态，云端均未就绪时「仅云端」不可选。
+
+显式选择「仅云端」或「自动兜底」允许新任务使用已配置的云端，即使配置文件中的 `enabled = false`；选择「仅本地」则禁止这些任务使用云端。首次没有网页选择记录时，根据 `enabled` 决定默认模式（关闭则仅本地，开启则自动）。CLI 未指定模式时沿用原有配置；也可显式指定：
+
+```bash
+uv run studio --llm-mode local plan screenplays/example.txt
+uv run studio --llm-mode cloud plan screenplays/example.txt
+uv run studio --llm-mode auto qa storyboards/example.json
+```
+
+`api_key_env` 填的是环境变量**名称**（如 `STUDIO_CLOUD_API_KEY`），不是密钥本身。页面会提示这种配置错误并隐藏无效值；不要把密钥写入此字段。环境变量需要在启动网页服务的终端中设置。切换页面模式不替代密钥配置。
 
 需要云端时，编辑 `config.toml` 已有的配置段（替换示例地址、模型 ID）：
 

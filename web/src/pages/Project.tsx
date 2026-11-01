@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { api, fmtSec, type Job, type Project, type ShotView } from "../api";
-import { go, href, useAsync, useJobStream, useJobs, useOnProjectJobFinished, useToast } from "../hooks";
+import { go, href, useAsync, useJobStream, useJobs, useOnProjectJobFinished, useToast, useModelRouting } from "../hooks";
 import { ErrorBox, FaceScore, JobBadge, Loading, LogView, Markdown, Progress, Tabs, jobElapsed } from "../components/ui";
 import { StackedBars } from "../components/StackedBars";
 import { StoryboardEditor } from "./StoryboardEditor";
@@ -65,8 +65,11 @@ function ShotCard({ s, file }: { s: ShotView; file: string }) {
   const { jobs } = useJobs();
   const toast = useToast();
   const { refresh } = useJobs();
-  const busy = jobs.some((j) => j.project === file && (j.status === "running" || j.status === "queued"));
+  const routing = useModelRouting();
+  const routingBlocked = routing.loading || !!routing.pending || !!routing.error;
+  const busy = routingBlocked || jobs.some((j) => j.project === file && (j.status === "running" || j.status === "queued"));
   const redo = async (kind: "image" | "audio" | "clip", what: string) => {
+    if (routingBlocked) { toast("模型模式尚未就绪，请先完成切换或重新读取", "info"); return; }
     if (!confirm(`${what}镜头 ${s.name}？${kind === "clip" ? "会换一个随机种子，出不同的动作。" : "旧文件会移到 _history，不会删除。"}`)) return;
     try {
       const r = await api.redo(file, kind, s.name);

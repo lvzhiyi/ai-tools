@@ -116,7 +116,7 @@ class Inspector:
             from .llm import available
             if not available(self.llm_cfg, vision=True):
                 self.use_vision = False
-                _log("  ⚪ 本地模型不可用，且云端看图兜底未就绪，本次跳过看图质检（只做人脸比对）。请打开 LM Studio Server 或配置 [lmstudio.cloud] 的 vision_model 和密钥")
+                _log("  ⚪ 当前模式下没有可用的看图模型，本次跳过看图质检（只做人脸比对）。请检查所选模式、LM Studio Server 或云端 vision_model 和密钥")
         # cid -> [(来源标签, 特征)]
         self.refs: dict[str, list] = {}
         if faces:

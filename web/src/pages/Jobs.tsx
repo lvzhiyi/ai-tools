@@ -36,7 +36,8 @@ export function JobDetail({ id }: { id: string }) {
   if (error) return <ErrorBox error={error} />;
   if (!data) return <Loading />;
   // 拆分镜任务：成功后直接给出新分镜表的入口
-  const planned = data.kind === "plan" ? data.argv[1]?.replace(/^screenplays\//, "").replace(/\.txt$/, ".json") : null;
+  const commandArgs = data.argv[0] === "--llm-mode" ? data.argv.slice(2) : data.argv;
+  const planned = data.kind === "plan" ? commandArgs[1]?.replace(/^screenplays\//, "").replace(/\.txt$/, ".json") : null;
   return (
     <div className="stack">
       <div className="page-head">
