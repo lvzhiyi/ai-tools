@@ -1,5 +1,6 @@
 """镜头本导入：确定性字段由代码保证，模型输出只用来补英文提示词；不访问真实模型。"""
 import copy
+import io
 import json
 import tempfile
 import unittest
@@ -138,7 +139,9 @@ class ImportTests(unittest.TestCase):
                 self.assertEqual(json.loads(out.read_text(encoding="utf-8"))["source"], jingtouben.FORMAT)
                 self.assertEqual(cli.main(["import", str(FIXTURE)]), 1)
                 self.assertEqual(cli.main(["import", str(FIXTURE), "--name", "雨夜-2"]), 0)
-            self.assertEqual(sorted(p.name for p in (root / "storyboards").iterdir()), ["雨夜-2.json", "雨夜.json"])
+                with patch("sys.stdin", io.StringIO(FIXTURE.read_text(encoding="utf-8"))):
+                    self.assertEqual(cli.main(["import", "-", "--name", "雨夜-stdin"]), 0)
+            self.assertEqual(sorted(p.name for p in (root / "storyboards").iterdir()), ["雨夜-2.json", "雨夜-stdin.json", "雨夜.json"])
 
 
 if __name__ == "__main__":

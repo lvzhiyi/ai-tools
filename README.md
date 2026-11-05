@@ -370,7 +370,10 @@ git clone https://github.com/dgrauet/ltx-2-mlx.git && cd ltx-2-mlx && uv sync
 ```bash
 uv run studio import 镜头本导出.json                    # 默认文件名用项目标题
 uv run studio import 镜头本导出.json --name 雨夜-v2      # 换个名字；同名已存在时加 --force 覆盖
+pbpaste | uv run studio import -                       # 镜头本 Web 版「导出 JSON」会复制全文，直接从剪贴板导入
 ```
+
+镜头本分镜页右上角的「导出 JSON」生成这份文件：手机上调起系统面板（隔空投送、存到文件），Web 版复制到剪贴板。
 
 导出格式（字段名对应镜头本的 drift 表，样例见 [tests/fixtures/jingtouben-export.json](tests/fixtures/jingtouben-export.json)）：
 

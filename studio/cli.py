@@ -4,6 +4,7 @@
   studio image "画面描述"               只出一张图，快速试提示词
   studio plan 剧本.txt                  本地优先拆分镜，可选云端兜底 → storyboards/
   studio import 镜头本导出.json          导入镜头本（jingtouben）的分镜和角色卡 → storyboards/
+  pbpaste | studio import -            从剪贴板导入（镜头本 Web 版「导出 JSON」会复制全文）
   studio run storyboards/xxx.json      跑完整流水线 → output/（出图带 AI 质检）
   studio i2v storyboards/xxx.json      图生视频：每个镜头的图 → 几秒动态镜头（LTX-2.3，本地 MLX）
   studio cast storyboards/xxx.json     只生成角色定妆照（质检用的"标准脸"）
@@ -64,7 +65,8 @@ def cmd_import(cfg: dict, args) -> int:
     from .jingtouben import import_storyboard
     from .web.projects import safe_name
 
-    data = json.loads(Path(args.file).read_text(encoding="utf-8"))
+    text = sys.stdin.read() if args.file == "-" else Path(args.file).read_text(encoding="utf-8")
+    data = json.loads(text)
     print("正在把镜头本分镜改写成英文提示词...")
     sb, warnings = import_storyboard(data, cfg["lmstudio"])
     out = ROOT / "storyboards" / safe_name(args.name or sb["title"])
@@ -232,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--max-shots", type=int, default=12)
 
     s = sub.add_parser("import", help="镜头本导出的 JSON → 分镜表")
-    s.add_argument("file", help="镜头本导出的 JSON 文件")
+    s.add_argument("file", help="镜头本导出的 JSON 文件；- 表示从标准输入读（如 pbpaste | studio import -）")
     s.add_argument("--name", help="分镜表文件名（默认用项目标题）")
     s.add_argument("--force", action="store_true", help="同名分镜表已存在时覆盖")
 
