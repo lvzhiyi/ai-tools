@@ -164,6 +164,7 @@ ai-tools/
 │   ├── subtitle.py      ← 由台词 + 音频时长生成 SRT
 │   ├── i2v.py           ← 图生视频：LTX-2.3（子进程调用）+ 抽帧人脸质检
 │   ├── checks.py        ← 环境检查（studio check 和网页共用）
+│   ├── mcp_server.py    ← MCP Server：让 Claude 等 Agent 通过 studio web 的接口操作流水线
 │   ├── web/             ← 网页控制台后端：app.py（接口）、jobs.py（任务队列 + SSE）、projects.py（项目数据）、static/（构建好的前端）
 │   ├── video.py         ← ffmpeg 拼预览视频
 │   ├── plan.py          ← LM Studio：剧本 → 分镜表
@@ -282,6 +283,31 @@ uv run studio web        # 打开 http://127.0.0.1:8780
 - 重做某个镜头时旧文件挪进 `_history/<时间>/`，不删除；视频片段重做会换随机种子（同一张图 + 同一段描述，只有换种子才出不同的动作）
 - 前端（`web/`，React + TypeScript，esbuild 打包）：构建产物提交在 `studio/web/static/`，**用控制台不需要装 Node**；
   改前端时 `cd web && npm install && npm run dev`（监听构建，刷新浏览器即可）
+
+## MCP：让 Agent 直接操作流水线
+
+`studio/mcp_server.py` 把控制台的能力包装成 MCP 工具，Claude Code / Claude Desktop 等客户端可以直接读分镜、改分镜、提交任务、看成图。
+
+```bash
+uv run studio web --no-browser   # 先开控制台（MCP 只是它的客户端）
+claude mcp add ai-tools -- uv --directory ~/ai-tools run python -m studio.mcp_server
+```
+
+Claude Desktop 在 `claude_desktop_config.json` 里加同样的 `command` / `args` 即可。控制台不在默认地址时，设环境变量 `STUDIO_URL`。
+
+| 工具 | 作用 |
+|---|---|
+| `check_env` / `list_storyboards` / `get_storyboard` / `get_project` | 只读：环境检查、分镜表列表和完成度、分镜原文、每个镜头的产物和质检分数 |
+| `view_shot_image` | 返回某个镜头的成图（缩到 512px），让模型自己看构图和人物 |
+| `save_storyboard` | 整份保存分镜表，和命令行同一套校验，不合法不覆盖 |
+| `start_job` / `redo_shot` | 提交全流程、单步、图生视频、定妆照、质检、拆分镜、试图；重做单个镜头（旧文件归档） |
+| `get_job` / `wait_job` / `cancel_job` | 查进度和日志尾部；等待结果（单次最多 50 秒，没完成就再调）；取消 |
+
+**设计取舍**
+
+- **只做 HTTP 薄客户端，不自己跑任务**：24GB 内存一次只能跑一个大模型，任务队列只能有一个主人。MCP 提交的任务和网页上点的排在同一个队列里，网页上能看到、能取消。
+- **长任务异步**：出图、图生视频要几分钟，超过 MCP 调用超时。`start_job` 立即返回任务 ID 和前面还排着几个，`wait_job` 期间上报进度。
+- **白名单**：任务参数走和网页同一个 `build_job` 校验，不提供"执行任意命令"；工具带只读 / 会覆盖的标注，客户端可以据此决定要不要确认。
 
 ## 日常用法
 

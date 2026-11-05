@@ -11,6 +11,8 @@ dependencies = [
     "jsonschema>=4.26,<5",  # 校验模型结构化输出，失败后可云端兜底
     "starlette",   # 网页控制台（studio web）
     "uvicorn",
+    "mcp>=2.3.0",
+    "httpx>=0.28.1",
 ]
 
 [project.scripts]
