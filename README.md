@@ -168,6 +168,7 @@ ai-tools/
 │   ├── web/             ← 网页控制台后端：app.py（接口）、jobs.py（任务队列 + SSE）、projects.py（项目数据）、static/（构建好的前端）
 │   ├── video.py         ← ffmpeg 拼预览视频
 │   ├── plan.py          ← LM Studio：剧本 → 分镜表
+│   ├── jingtouben.py    ← 导入镜头本（jingtouben）导出的中文分镜 + 角色卡 → 分镜表
 │   ├── storyboard.py    ← 分镜表格式（角色 + 镜头）
 │   ├── qa.py            ← AI 自动质检：定妆照、打分、重画、报告
 │   ├── label.py         ← 人工标注页面（盲标"像不像"）
@@ -326,6 +327,9 @@ uv run studio plan screenplays/example.txt
 #    打开 storyboards/example.json 检查修改，然后卸载 LM Studio 模型，再：
 uv run studio run storyboards/example.json
 
+#    或者从镜头本（jingtouben）导入已经整理好的分镜和角色卡（见下方「从镜头本导入」）
+uv run studio import 镜头本导出.json      # → storyboards/<项目标题>.json
+
 # 4. 图生视频：每个镜头的图 → 动态镜头，然后自动重拼预览视频（图和配音要先有）
 uv run studio i2v storyboards/example.json              # 全部镜头（已有片段跳过）
 uv run studio i2v storyboards/example.json --shots 2,4 --force   # 只重做某几个
@@ -357,6 +361,42 @@ git clone https://github.com/dgrauet/ltx-2-mlx.git && cd ltx-2-mlx && uv sync
 **改一个镜头**：删掉对应的 `images/03.png` 或 `audio/03.wav`，再 `run` 一次，只会重新生成缺的文件。
 **只跑某一步**：`uv run studio run storyboards/xxx.json --only audio`
 **全部重来**：加 `--force`
+
+## 从镜头本导入
+
+[镜头本](../jingtouben)（Flutter App）负责"生成之前"的整理：中文分镜卡（景别、画面、台词、为什么这样拍）和角色卡（外貌、服装）。
+`studio import` 把它的导出文件转成本项目的分镜表，再照常 `studio run`。
+
+```bash
+uv run studio import 镜头本导出.json                    # 默认文件名用项目标题
+uv run studio import 镜头本导出.json --name 雨夜-v2      # 换个名字；同名已存在时加 --force 覆盖
+```
+
+导出格式（字段名对应镜头本的 drift 表，样例见 [tests/fixtures/jingtouben-export.json](tests/fixtures/jingtouben-export.json)）：
+
+```json
+{
+  "format": "jingtouben.storyboard", "version": 1,
+  "project": {"title": "雨夜", "story": "故事原文（可选）"},
+  "characters": [{"name": "林夏", "appearance": "二十五岁，鹅蛋脸……", "outfit": "米色风衣……"}],
+  "shots": [{"order": 1, "shotSize": "中景", "scene": "画面", "dialogue": "台词",
+             "reason": "为什么这样拍", "characters": ["林夏"]}]
+}
+```
+
+也接受 `sortOrder` / `characterNames` 这些列名，景别中文名或枚举名（`medium`、`closeUp`……）都认。
+
+**分工**：确定的东西代码管，需要改写的交给模型（`llm.chat`，同样本地优先、可选云端兜底，一次调用）。
+
+| 分镜表字段 | 来源 |
+|---|---|
+| `line`、镜头顺序、每个镜头的出场角色 | 导出文件原样（`sortOrder` 不连续时重新编号 1、2、3…） |
+| `note` | 镜头本的"为什么这样拍"，流水线不用，留给人看 |
+| 角色 `id`、`look` | 模型给 id 和英文外貌；id 不合法或重复时代码兜底为 `char1`…；没建角色卡的人物由模型按故事推断外貌，并提示去补卡 |
+| `image`、`motion` | 模型翻译成英文提示词，用 `{角色id}` 指代角色；把 `{林夏}` 写成中文名的改成 id，引用了不在场角色的去掉花括号；漏写景别时由代码补上 |
+| `voice`、`emotion` | 模型从固定音色里选（schema 限定） |
+
+写盘前先用流水线自己的 `storyboard.load` 校验一遍，不通过就不落文件。
 
 ## AI 自动质检
 

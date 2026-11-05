@@ -1,0 +1,13 @@
+{
+  "format": "jingtouben.storyboard",
+  "version": 1,
+  "project": {"title": "雨夜", "story": "林夏深夜下班，发现有人一路跟着她，她拨通了报警电话。"},
+  "characters": [
+    {"name": "林夏", "appearance": "二十五岁，鹅蛋脸，黑色齐肩直发，空气刘海", "outfit": "米色双排扣风衣，黑色高领毛衣"}
+  ],
+  "shots": [
+    {"order": 3, "shotSize": "特写", "scene": "林夏把手机贴在耳边，雨滴挂在脸上", "dialogue": "喂，110吗？", "reason": "特写表现决心", "characters": ["林夏"]},
+    {"order": 1, "shotSize": "大远景", "scene": "雨夜霓虹街道，空无一人", "dialogue": "", "reason": "交代环境", "characters": []},
+    {"order": 2, "shotSize": "远景", "scene": "穿雨衣的男人站在路灯下", "dialogue": "那个人影，始终保持着二十米的距离。", "reason": "", "characters": ["雨衣男"]}
+  ]
+}

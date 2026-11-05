@@ -3,6 +3,7 @@
   studio check                         检查环境（ComfyUI / LM Studio / ffmpeg / 配音模型）
   studio image "画面描述"               只出一张图，快速试提示词
   studio plan 剧本.txt                  本地优先拆分镜，可选云端兜底 → storyboards/
+  studio import 镜头本导出.json          导入镜头本（jingtouben）的分镜和角色卡 → storyboards/
   studio run storyboards/xxx.json      跑完整流水线 → output/（出图带 AI 质检）
   studio i2v storyboards/xxx.json      图生视频：每个镜头的图 → 几秒动态镜头（LTX-2.3，本地 MLX）
   studio cast storyboards/xxx.json     只生成角色定妆照（质检用的"标准脸"）
@@ -55,6 +56,32 @@ def cmd_plan(cfg: dict, args) -> int:
     print(f"✅ 分镜表：{out}（{len(sb.get('shots', []))} 个镜头）")
     print("   先打开检查、修改，再运行：uv run studio run " + str(out.relative_to(ROOT)))
     print("   提示：出图前记得在 LM Studio 里卸载模型，把内存让给 ComfyUI")
+    return 0
+
+
+def cmd_import(cfg: dict, args) -> int:
+    from . import storyboard as sbmod
+    from .jingtouben import import_storyboard
+    from .web.projects import safe_name
+
+    data = json.loads(Path(args.file).read_text(encoding="utf-8"))
+    print("正在把镜头本分镜改写成英文提示词...")
+    sb, warnings = import_storyboard(data, cfg["lmstudio"])
+    out = ROOT / "storyboards" / safe_name(args.name or sb["title"])
+    if out.exists() and not args.force:
+        raise FileExistsError(f"{out.relative_to(ROOT)} 已存在，换个 --name 或加 --force 覆盖")
+    tmp = out.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(sb, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        sbmod.load(tmp)  # 用流水线自己的校验再检查一遍，通过了才落到正式文件名
+    except Exception:
+        tmp.unlink()
+        raise
+    tmp.replace(out)
+    print(f"✅ 分镜表：{out}（{len(sb['shots'])} 个镜头，{len(sb['characters'])} 个角色）")
+    for w in warnings:
+        print(f"   ⚠️ {w}")
+    print("   先打开检查、修改，再运行：uv run studio run " + str(out.relative_to(ROOT)))
     return 0
 
 
@@ -204,6 +231,11 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("script", help="剧本文本文件")
     s.add_argument("--max-shots", type=int, default=12)
 
+    s = sub.add_parser("import", help="镜头本导出的 JSON → 分镜表")
+    s.add_argument("file", help="镜头本导出的 JSON 文件")
+    s.add_argument("--name", help="分镜表文件名（默认用项目标题）")
+    s.add_argument("--force", action="store_true", help="同名分镜表已存在时覆盖")
+
     s = sub.add_parser("run", help="分镜表 → 图片/配音/字幕/预览视频")
     s.add_argument("storyboard")
     s.add_argument("--only", choices=["images", "audio", "i2v", "subtitle", "video"], help="只跑某一步")
@@ -252,11 +284,11 @@ def main(argv: list[str] | None = None) -> int:
         cfg.setdefault("qa", {})["enabled"] = False
     if getattr(args, "no_edit", False) and isinstance(cfg["comfy"].get("edit"), dict):
         cfg["comfy"]["edit"]["enabled"] = False
-    if args.cmd in {"plan", "run", "qa", "calibrate"}:
+    if args.cmd in {"plan", "import", "run", "qa", "calibrate"}:
         mode = cfg["lmstudio"].get("routing_mode", "auto")
         label = {"local": "仅本地", "cloud": "仅云端", "auto": "本地优先、云端兜底"}.get(mode, "未知模式")
         print(f"[{time.strftime('%H:%M:%S')}] 模型路由：{label}（用于拆分镜和看图质检；出图由 ComfyUI 执行）", flush=True)
-    handler = {"check": cmd_check, "image": cmd_image, "plan": cmd_plan, "run": cmd_run,
+    handler = {"check": cmd_check, "image": cmd_image, "plan": cmd_plan, "import": cmd_import, "run": cmd_run,
                "cast": cmd_cast, "qa": cmd_qa, "calibrate": cmd_calibrate, "label": cmd_label, "runs": cmd_runs, "i2v": cmd_i2v, "web": cmd_web}[args.cmd]
     try:
         return handler(cfg, args)
